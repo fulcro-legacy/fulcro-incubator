@@ -15,7 +15,8 @@
 
    :extra-deps
    {fulcrologic/fulcro-inspect {:mvn/version "2.2.1"}
-    nubank/workspaces          {:mvn/version "1.0.0-preview1"}}}
+    nubank/workspaces          {:mvn/version "1.0.0-preview1"}
+    fulcrologic/fulcro-spec    {:mvn/version "2.1.0-1"}}}
 
   :shadow
   {:extra-paths
