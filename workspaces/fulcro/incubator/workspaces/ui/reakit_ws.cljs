@@ -2,6 +2,7 @@
   (:require [nubank.workspaces.core :as ws]
             [nubank.workspaces.model :as wsm]
             [nubank.workspaces.card-types.react :as ct.react]
+            [fulcro.incubator.ui.core :refer [js-spread]]
             [fulcro.incubator.ui.reakit :as rk]
             [fulcro.incubator.ui.icons.font-awesome :as fa]))
 
@@ -55,8 +56,8 @@
     (rk/popover-container
       (fn [popover]
         (rk/inline-block {:relative true}
-          (rk/backdrop (merge {:background "transparent" :as rk/PopoverHide} (js->clj popover)))
-          (rk/button (merge {:as rk/PopoverToggle} (js->clj popover)) "Toggle")
+          (rk/backdrop (js-spread {:background "transparent" :as rk/PopoverHide} popover))
+          (rk/button (js-spread {:as rk/PopoverToggle} popover) "Toggle")
           (rk/popover popover
             (rk/popover-arrow)
             "Click outside to hide"))))))
