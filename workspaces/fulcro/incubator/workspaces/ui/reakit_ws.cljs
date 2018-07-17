@@ -1,0 +1,71 @@
+(ns fulcro.incubator.workspaces.ui.reakit-ws
+  (:require [nubank.workspaces.core :as ws]
+            [nubank.workspaces.model :as wsm]
+            [nubank.workspaces.card-types.react :as ct.react]
+            [fulcro.incubator.ui.reakit :as rk]
+            [fulcro.incubator.ui.icons.font-awesome :as fa]))
+
+(ws/defcard reakit-base
+  (ct.react/react-card
+    (rk/block
+      (rk/base "Base")
+      (rk/base {:backgroundColor "palevioletred" :color "white"} "Base"))))
+
+(ws/defcard reakit-block
+  (ct.react/react-card
+    (rk/block
+      (rk/block {:width "100px" :height "100px" :backgroundColor "rgb(219, 112, 147)"})
+      (rk/block {:width "100px" :height "100px" :backgroundColor "rgb(219, 112, 198)"})
+      (rk/block {:width "100px" :height "100px" :backgroundColor "rgb(205, 112, 219)"}))))
+
+(ws/defcard reakit-box
+  (ct.react/react-card
+    (rk/box "Box")))
+
+(ws/defcard reakit-flex
+  (ct.react/react-card
+    (rk/flex
+      (rk/paragraph {:marginRight "1em"}
+        "Aliqua tempor adipisicing dolor Lorem ut aliqua nostrud esse. Ex esse sunt\n    irure aliqua dolor labore. Ad nostrud esse qui duis dolore in aliquip. Esse\n    velit laborum magna duis ad magna commodo qui laboris in duis incididunt\n    laboris.")
+      (rk/paragraph "Deserunt occaecat consectetur id aliquip aliqua mollit ipsum laborum in\n    fugiat dolor reprehenderit."))))
+
+(ws/defcard reakit-button
+  (ct.react/react-card
+    (rk/grid {:column true :gap "1em"}
+      (rk/button "Button")
+      (rk/button (fa/bell) "Bell"))))
+
+(def grid-template
+  "\"a a a\" 60px
+   \"b c c\" minmax(200px, 1fr)
+   \"d d d\" 100px / 150px")
+
+(ws/defcard reakit-grid-item
+  {::wsm/align ::wsm/align-top-flex}
+  (ct.react/react-card
+    (rk/grid {:template grid-template :flex "1"}
+      (rk/grid-item {:area "a" :backgroundColor "red"} "Header")
+      (rk/grid-item {:area "b" :backgroundColor "green"} "Sidebar")
+      (rk/grid-item {:area "c" :backgroundColor "blue"} "Content")
+      (rk/grid-item {:area "d" :backgroundColor "yellow"} "Footer"))))
+
+(ws/defcard reakit-popover
+  {::wsm/align ::wsm/align-top}
+  (ct.react/react-card
+    (rk/popover-container
+      (fn [popover]
+        (rk/inline-block {:relative true}
+          (rk/backdrop (merge {:background "transparent" :as rk/PopoverHide} (js->clj popover)))
+          (rk/button (merge {:as rk/PopoverToggle} (js->clj popover)) "Toggle")
+          (rk/popover popover
+            (rk/popover-arrow)
+            "Click outside to hide"))))))
+
+(ws/defcard reakit-tooltip
+  (ct.react/react-card
+    (rk/button
+      "Hover me"
+      (rk/tooltip {:pos "top"} (rk/tooltip-arrow {:pos "bottom"}) "Tooltip")
+      (rk/tooltip {:pos "right"} (rk/tooltip-arrow {:pos "left"}) "Tooltip")
+      (rk/tooltip {:pos "bottom"} (rk/tooltip-arrow {:pos "top"}) "Tooltip")
+      (rk/tooltip {:pos "left"} (rk/tooltip-arrow {:pos "right"}) "Tooltip"))))
