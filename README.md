@@ -1,14 +1,18 @@
 # fulcro-incubator
 
-A Clojure library designed to ... well, that part is up to you.
+This is a set of useful experimental features for Fulcro, consider it as an assist library.
 
-## Usage
+## Compiling workspaces
 
-FIXME
+To explore the things here, clone this project and run:
 
-## License
+```
+npm install
+npx shadow-cljs watch workspaces
+```
 
-Copyright © 2018 FIXME
+Then navigate to
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+```
+http://localhost:3689/
+```
