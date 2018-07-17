@@ -14,7 +14,8 @@
    ["workspaces"]
 
    :extra-deps
-   {fulcrologic/fulcro-inspect {:mvn/version "2.2.1"}}}
+   {fulcrologic/fulcro-inspect {:mvn/version "2.2.1"}
+    nubank/workspaces          {:mvn/version "1.0.0-preview1"}}}
 
   :shadow
   {:extra-paths
