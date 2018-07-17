@@ -69,3 +69,23 @@
       (rk/tooltip {:pos "right"} (rk/tooltip-arrow {:pos "left"}) "Tooltip")
       (rk/tooltip {:pos "bottom"} (rk/tooltip-arrow {:pos "top"}) "Tooltip")
       (rk/tooltip {:pos "left"} (rk/tooltip-arrow {:pos "right"}) "Tooltip"))))
+
+(ws/defcard reakit-table
+  (ct.react/react-card
+    (rk/block {:overflowX "auto"}
+      (rk/table
+        (rk/table-caption "A Basic table")
+        (rk/table-head
+          (rk/table-row
+            (rk/table-cell {:header true})
+            (rk/table-cell {:header true} "Chars")
+            (rk/table-cell {:header true} "Popularity")))
+        (rk/table-body
+          (rk/table-row
+            (rk/table-cell {:header true} "Foo")
+            (rk/table-cell "3")
+            (rk/table-cell "0.7"))
+          (rk/table-row
+            (rk/table-cell {:header true} "Bar")
+            (rk/table-cell "3")
+            (rk/table-cell "0.4")))))))
