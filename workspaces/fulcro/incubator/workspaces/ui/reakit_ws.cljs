@@ -13,6 +13,7 @@
       (rk/base {:backgroundColor "palevioletred" :color "white"} "Base"))))
 
 (ws/defcard reakit-block
+  {::wsm/card-width 2 ::wsm/card-height 11}
   (ct.react/react-card
     (rk/block
       (rk/block {:width "100px" :height "100px" :backgroundColor "rgb(219, 112, 147)"})
@@ -20,10 +21,12 @@
       (rk/block {:width "100px" :height "100px" :backgroundColor "rgb(205, 112, 219)"}))))
 
 (ws/defcard reakit-box
+  {::wsm/card-width 1 ::wsm/card-height 3}
   (ct.react/react-card
     (rk/box "Box")))
 
 (ws/defcard reakit-flex
+  {::wsm/card-width 5 ::wsm/card-height 5}
   (ct.react/react-card
     (rk/flex
       (rk/paragraph {:marginRight "1em"}
@@ -42,6 +45,7 @@
    \"d d d\" 100px / 150px")
 
 (ws/defcard reakit-grid-item
+  {::wsm/card-width 6 ::wsm/card-height 11}
   {::wsm/align ::wsm/align-top-flex}
   (ct.react/react-card
     (rk/grid {:template grid-template :flex "1"}
@@ -51,6 +55,7 @@
       (rk/grid-item {:area "d" :backgroundColor "yellow"} "Footer"))))
 
 (ws/defcard reakit-popover
+  {::wsm/card-width 2 ::wsm/card-height 5}
   {::wsm/align ::wsm/align-top}
   (ct.react/react-card
     (rk/popover-container
@@ -63,6 +68,7 @@
             "Click outside to hide"))))))
 
 (ws/defcard reakit-tooltip
+  {::wsm/card-width 3 ::wsm/card-height 6}
   (ct.react/react-card
     (rk/button
       "Hover me"
@@ -72,6 +78,7 @@
       (rk/tooltip {:pos "left"} (rk/tooltip-arrow {:pos "right"}) "Tooltip"))))
 
 (ws/defcard reakit-table
+  {::wsm/card-width 2 ::wsm/card-height 6}
   (ct.react/react-card
     (rk/block {:overflowX "auto"}
       (rk/table
