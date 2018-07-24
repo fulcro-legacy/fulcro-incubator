@@ -7,7 +7,7 @@
             [fulcro.client.data-fetch :as fetch]
             [clojure.set :as set]))
 
-(defn- om-ident? [x]
+(defn- fulcro-ident? [x]
   (and (vector? x)
        (= 2 (count x))
        (keyword? (first x))))
@@ -41,7 +41,7 @@
     (if h
       (let [np (conj new-path h)
             c  (get-in state np)]
-        (if (om-ident? c)
+        (if (fulcro-ident? c)
           (recur t c)
           (recur t (conj new-path h))))
       new-path)))
@@ -92,11 +92,11 @@
         idents (into []
                      (comp (keep (fn [v]
                                    (cond
-                                     (om-ident? v)
+                                     (fulcro-ident? v)
                                      [v]
 
                                      (and (vector? v)
-                                          (every? om-ident? v))
+                                          (every? fulcro-ident? v))
                                      v)))
                            cat)
                      (vals item))]
@@ -109,7 +109,7 @@
   "Remove edge data from a node. This will remove the ref and all associated data with it (recursive)."
   (let [children (get-in @state (conj ref field))]
     (cond
-      (om-ident? children)
+      (fulcro-ident? children)
       (swap! state (comp #(update-in % ref dissoc field)
                          #(deep-remove-ref % children)))
 
@@ -130,13 +130,13 @@
          (if (and (= :join type) component)
            (let [value (get-in state (conj ident key))]
              (cond
-               (om-ident? value)
+               (fulcro-ident? value)
                (init-state s component value)
 
                (vector? value)
                (reduce
                  (fn [s ident]
-                   (if (om-ident? ident)
+                   (if (fulcro-ident? ident)
                      (init-state s component ident)
                      s))
                  s
