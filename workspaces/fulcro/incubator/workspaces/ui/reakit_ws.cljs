@@ -39,6 +39,10 @@
       (rk/button "Button")
       (rk/button (fa/bell) "Bell"))))
 
+(ws/defcard reakit-input
+  (ct.react/react-card
+    (rk/input {:type "text"})))
+
 (def grid-template
   "\"a a a\" 60px
    \"b c c\" minmax(200px, 1fr)
