@@ -20,8 +20,4 @@
    {fulcrologic/fulcro-inspect {:mvn/version "2.2.1"}
     binaryage/devtools         {:mvn/version "0.9.10"}
     nubank/workspaces          {:mvn/version "1.0.0-preview4"}
-    fulcrologic/fulcro-spec    {:mvn/version "2.1.0-1"}}}
-
-  :shadow
-  {:extra-paths
-   ["src-shadow-cljsjs"]}}}
+    fulcrologic/fulcro-spec    {:mvn/version "2.1.0-1"}}}}}
