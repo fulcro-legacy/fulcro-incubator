@@ -71,7 +71,50 @@
       (apply fp/integrate-ident state root-ident named-parameters)
       state)))
 
-(defn create-entity! [{:keys [state ref]} x data & named-parameters]
+(defn initialized
+  "Mark data as initialized so the value is not augmented via initial state."
+  [data] (vary-meta data assoc ::initialized true))
+
+(defn create-entity!
+  "Create a new entity on the database for a given component. Example:
+
+      (fp/defsc TodoItem
+      [this {::keys []}]
+      ; note the create-entity! data will be used as input for component initial state
+      ; function to get the new entity initial state
+      {:initial-state (fn [{::keys [title]}]
+                        {::todo-id (random-uuid)
+                         ::title   title})
+       :ident         [::todo-id ::todo-id]
+       :query         [::todo-id ::title]})
+
+      (def todo-item (fp/factory TodoItem {:keyfn ::todo-id}))
+
+      (fm/defmutation add-todo [todo]
+        (action [env]
+          ; append will integrate the new ident into the current ref (which is the todo
+          ; list since it's the transaction reference)
+          (db.h/create-entity! env TodoItem todo :append ::todo-items)))
+
+      (fp/defsc TodoList
+        [this {::keys [todo-items]}]
+        {:initial-state (fn [_]
+                          {})
+         :ident         (fn [] [::todo-list \"singleton\"])
+         :query         [{::todo-items (fp/get-query TodoItem)}]
+         :css           []
+         :css-include   []}
+        (dom/div
+          (dom/button {:onClick #(fp/transact! this [`(add-todo {::title \"Description\"})])})
+          (mapv todo-item todo-items)))
+
+  If you like to send the new entity data directly you can mark it as initialized:
+
+      (let [todo (-> (fp/get-initial-state TodoItem todo)
+                     (db.h/initialized))]
+        (db.h/create-entity! env TodoItem todo :append ::todo-items))
+  "
+  [{:keys [state ref]} x data & named-parameters]
   (let [named-parameters (->> (partition 2 named-parameters)
                               (map (fn [[op path]] [op (conj ref path)]))
                               (apply concat))
@@ -239,13 +282,15 @@
   (if-let [m (get (methods mutations/mutate) k)]
     (m env k p)))
 
-(defn call-mutation-action [env k p]
+(defn call-mutation-action
+  "Call a mutation action define in fulcro.client.mutations/mutate."
+  [env k p]
   (if-let [h (-> (get-mutation env k p) :action)]
     (h)))
 
 (s/def ::mutation-response (s/keys))
 
-(mutations/defmutation start-mutation [_]
+(mutations/defmutation start-pmutation [_]
   (action [env]
     (swap-entity! env assoc ::mutation-response {:fulcro.client.impl.data-fetch/type :loading})
     nil))
@@ -258,7 +303,7 @@
           (assoc ::fp/error "Network error")))
     nil))
 
-(mutations/defmutation finish-mutation [{:keys [ok-mutation error-mutation input]}]
+(mutations/defmutation finish-pmutation [{:keys [ok-mutation error-mutation input]}]
   (action [env]
     (let [{:keys [state ref reconciler]} env
           {::keys [mutation-response mutation-response-swap] :as props} (get-in @state ref)]
@@ -278,23 +323,24 @@
 (defn pmutate! [this mutation params]
   (let [ok-mutation    (symbol (str mutation "-ok"))
         error-mutation (symbol (str mutation "-error"))]
-    (fp/ptransact! this `[(start-mutation {})
+    (fp/ptransact! this `[(start-pmutation {})
                           ~(list mutation params)
                           (fulcro.client.data-fetch/fallback {:action mutation-network-error
                                                               ::ref   ~(fp/get-ident this)})
-                          (finish-mutation ~{:ok-mutation    ok-mutation
+                          (finish-pmutation ~{:ok-mutation   ok-mutation
                                              :error-mutation error-mutation
                                              :input          params})])))
 
-(def non-values #{:com.wsscode.pathom.core/reader-error :fulcro.client.primitives/not-found "  Error  "})
+(mutations/defmutation multi-mutation
+  "Creates a mutation that will execute a series of mutations. This can be useful to
+  setup post-mutations that compose over other mutations.
 
-(defn content
-  "There are special values on the DB that are not valid values. Here you give x, and
-  if x is a special value (usually error reporting) it will return nil. Otherwise x
-  is returned."
-  [x] (if (non-values x) nil x))
+  Example:
 
-(mutations/defmutation multi-mutation [mutations]
+  (fetch/load app :root RootUI {:post-mutation `db.h/multi-mutation
+                                :post-mutation-params {`some-mutation-a {:a :param}
+                                                       `other-mutation  {:b :param}}})"
+  [mutations]
   (action [env]
     (doseq [[sym params] mutations
             :when (symbol? sym)]

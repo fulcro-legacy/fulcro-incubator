@@ -163,7 +163,7 @@
          :children     [{:dispatch-key * :key *}]}
 
     "modify query component when present"
-    (-> (db.h/transform-remote {:ref [:item 123]
+    (-> (db.h/transform-remote {:ref   [:item 123]
                                 :state (atom {})}
           (-> {:key 'my-mutation} (fm/returning (atom {}) PureUI)))
         (expand-meta))
