@@ -11,16 +11,17 @@ functions is in the code, give a scan there to check what's available.
 
 ## UI
 
-`fulcro.incubator.ui.core` contains functions to help using React components with Fulcro.
+[`fulcro.incubator.ui.core`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/ui/core.cljs)
+contains functions to help using React components with Fulcro.
 
 ### Reakit
 
-You can use Reakit wrapped with Fulcro DOM CSS support from `fulcro.incubator.ui.reakit`.
+You can use Reakit wrapped with Fulcro DOM CSS support from [`fulcro.incubator.ui.reakit`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/ui/reakit.cljs).
 
 ### React Icons
 
-React icons support is provided via `fulcro.incubator.ui.icons.*` namespaces, just
-refer to the functions there to use the icons directly.
+[React icons](http://react-icons.github.io/react-icons/) support is provided via [`fulcro.incubator.ui.icons.*`](https://github.com/fulcrologic/fulcro-incubator/tree/develop/src/fulcro/incubator/ui/icons)
+namespaces, just refer to the functions there to use the icons directly.
 
 ## Compiling workspaces
 
