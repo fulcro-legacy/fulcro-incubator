@@ -10,7 +10,7 @@
   [props js-props]
   (js/Object.assign (js-obj) (clj->js props) js-props))
 
-(defn wrap-react-component-localized
+(defn component-factory-localized
   "Wrap a react component with localized css support (like on dom/*)"
   [component]
   (fn [& args]
@@ -18,10 +18,10 @@
       (dom/macro-create-element component (next args) (first args))
       (dom/macro-create-element component args))))
 
-(defn wrap-simple
-  "Wrap a simple React component just send props (will convert to cljs). This doesn't accept
-  children."
+(defn component-factory-simple
+  "Make a factory to build a React instance from a React class."
   [component]
   (fn
     ([] (dom/create-element component))
-    ([props] (dom/create-element component (clj->js props)))))
+    ([props] (dom/create-element component (clj->js props)))
+    ([props & children] (apply dom/create-element component (clj->js props) children))))
