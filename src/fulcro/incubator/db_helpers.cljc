@@ -207,6 +207,23 @@
     (let [{:keys [state]} env]
       (swap! state init-state component ref))))
 
+(mutations/defmutation multi-mutation
+  "Creates a mutation that will execute a series of mutations. This can be useful to
+  setup post-mutations that compose over other mutations.
+
+  Example:
+
+  (fetch/load app :root RootUI {:post-mutation `db.h/multi-mutation
+                                :post-mutation-params {`some-mutation-a {:a :param}
+                                                       `other-mutation  {:b :param}}})"
+  [mutations]
+  (action [env]
+    (doseq [[sym params] mutations
+            :when (symbol? sym)]
+      ((:action (mutations/mutate env sym params))))))
+
+;; ALPHA APIS: the pieces below these are still in design phase and are likely to have the API changed
+
 (defn transform-remote [env ast]
   (let [ast (if (true? ast) (:ast env) ast)]
     (if-let [component (some-> ast :query meta :component)]
@@ -324,18 +341,3 @@
                           (finish-pmutation ~{:ok-mutation    ok-mutation
                                               :error-mutation error-mutation
                                               :input          params})])))
-
-(mutations/defmutation multi-mutation
-  "Creates a mutation that will execute a series of mutations. This can be useful to
-  setup post-mutations that compose over other mutations.
-
-  Example:
-
-  (fetch/load app :root RootUI {:post-mutation `db.h/multi-mutation
-                                :post-mutation-params {`some-mutation-a {:a :param}
-                                                       `other-mutation  {:b :param}}})"
-  [mutations]
-  (action [env]
-    (doseq [[sym params] mutations
-            :when (symbol? sym)]
-      ((:action (mutations/mutate env sym params))))))
