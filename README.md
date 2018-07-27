@@ -23,6 +23,11 @@ You can use [Reakit](https://reakit.io/) wrapped with Fulcro DOM CSS support fro
 [React icons](http://react-icons.github.io/react-icons/) support is provided via [`fulcro.incubator.ui.icons.*`](https://github.com/fulcrologic/fulcro-incubator/tree/develop/src/fulcro/incubator/ui/icons)
 namespaces, just refer to the functions there to use the icons directly.
 
+## Shadow CLJS required
+
+Currently this library requires usage of Shadow CLJS for compilation, this is due the
+direct use of libraries from NPM that are not available in cljsjs.
+
 ## Compiling workspaces
 
 To explore the things here, clone this project and run:
