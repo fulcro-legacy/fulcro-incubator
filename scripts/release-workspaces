@@ -1,0 +1,7 @@
+#!/bin/bash
+
+shadow-cljs release workspaces
+rm -rf docs
+mkdir -p docs
+cp -rf resources/public/* docs
+rm -rf docs/js/workspaces/cljs-runtime docs/js/workspaces/manifest.edn
