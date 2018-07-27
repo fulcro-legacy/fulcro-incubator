@@ -1,7 +1,6 @@
 (ns fulcro.incubator.db-helpers
   #?(:cljs (:require-macros [fulcro.incubator.db-helpers]))
-  (:require [com.wsscode.pathom.core]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [fulcro.client.mutations :as mutations]
             [fulcro.client.primitives :as fp]
             [fulcro.client.data-fetch :as fetch]
@@ -254,11 +253,6 @@
    (s/fdef defpmutation
      :args (s/cat :sym symbol? :args vector? :forms (s/+ list?))))
 
-(defn fetch-error
-  "Get the error data for a given attribute."
-  [this k]
-  (get-in (fp/props this) [:com.wsscode.pathom.core/errors k]))
-
 (defn mutation-response
   ([this]
    (if (fp/component? this)
@@ -290,17 +284,17 @@
 
 (s/def ::mutation-response (s/keys))
 
-(mutations/defmutation start-pmutation [_]
-  (action [env]
-    (swap-entity! env assoc ::mutation-response {:fulcro.client.impl.data-fetch/type :loading})
-    nil))
-
 (mutations/defmutation mutation-network-error [{::keys [ref] :as p}]
   (action [env]
     (swap-entity! (assoc env :ref ref) assoc ::mutation-response
       (-> p
           (dissoc ::ref)
           (assoc ::fp/error "Network error")))
+    nil))
+
+(mutations/defmutation start-pmutation [_]
+  (action [env]
+    (swap-entity! env assoc ::mutation-response {:fulcro.client.impl.data-fetch/type :loading})
     nil))
 
 (mutations/defmutation finish-pmutation [{:keys [ok-mutation error-mutation input]}]
@@ -327,9 +321,9 @@
                           ~(list mutation params)
                           (fulcro.client.data-fetch/fallback {:action mutation-network-error
                                                               ::ref   ~(fp/get-ident this)})
-                          (finish-pmutation ~{:ok-mutation   ok-mutation
-                                             :error-mutation error-mutation
-                                             :input          params})])))
+                          (finish-pmutation ~{:ok-mutation    ok-mutation
+                                              :error-mutation error-mutation
+                                              :input          params})])))
 
 (mutations/defmutation multi-mutation
   "Creates a mutation that will execute a series of mutations. This can be useful to
