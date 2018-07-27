@@ -2,6 +2,10 @@
 
 This is a set of useful experimental features for Fulcro, consider it as an assist library.
 
+## Install
+
+Latest version: [![Clojars Project](https://img.shields.io/clojars/v/fulcrologic/fulcro-incubator.svg)](https://clojars.org/fulcrologic/fulcro-incubator)
+
 ## DB Helpers
 
 At [`fulcro.incubator.db-helpers`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/db_helpers.cljc) you can find helper functions to deal with Fulcro local
