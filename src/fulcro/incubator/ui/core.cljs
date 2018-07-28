@@ -13,10 +13,25 @@
 (defn component-factory-localized
   "Wrap a react component with localized css support (like on dom/*)"
   [component]
-  (fn [& args]
-    (if (keyword? (first args))
-      (dom/macro-create-element component (next args) (first args))
-      (dom/macro-create-element component args))))
+  (fn localized-factory
+    ([]
+     (dom/create-element component))
+    ([arg]
+     (if (keyword? arg)
+       (dom/macro-create-element component [] arg)
+       (dom/macro-create-element component [arg])))
+    ([arg arg2]
+     (if (keyword? arg)
+       (dom/macro-create-element component [arg2] arg)
+       (dom/macro-create-element component [arg arg2])))
+    ([arg arg2 arg3]
+     (if (keyword? arg)
+       (dom/macro-create-element component [arg2 arg3] arg)
+       (dom/macro-create-element component [arg arg2 arg3])))
+    ([arg arg2 arg3 & rest]
+     (if (keyword? arg)
+       (dom/macro-create-element component (concat [arg2 arg3] rest) arg)
+       (dom/macro-create-element component (concat [arg arg2 arg3] rest))))))
 
 (defn component-factory-simple
   "Make a factory to build a React instance from a React class."
