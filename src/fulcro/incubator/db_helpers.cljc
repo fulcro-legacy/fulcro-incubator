@@ -258,8 +258,8 @@
 
 #?(:clj
    (defmacro defpmutation
-     "Defines a pessimistic mutation. This is adapted to work with the pessimist mutation
-     system for Shuffle. This works similar to the normal `defmutation`, but instead of
+     "Defines a pessimistic mutation. This is adapted to work with ident based pessimist mutation
+     system. This works similar to the normal `defmutation`, but instead of
      doing the optimistic update right after the action, it delays to when the response
      is success from the remote. If the remote fails, the UI change is not going to be
      applied."
