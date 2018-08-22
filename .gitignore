@@ -12,3 +12,5 @@ pom.xml.asc
 .cpcache
 .shadow-cljs
 resources/public/js
+.idea
+.iml
