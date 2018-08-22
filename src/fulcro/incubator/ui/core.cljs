@@ -1,5 +1,6 @@
 (ns fulcro.incubator.ui.core
-  (:require [fulcro.client.localized-dom :as dom]))
+  (:require [fulcro.client.localized-dom :as dom]
+            [fulcro.client.dom :as c-dom]))
 
 (defn js-spread
   "Use this to merge JS props with your Clojure props, this is usually needed when you
@@ -14,6 +15,29 @@
   "Wrap a react component with localized css support (like on dom/*)"
   [component]
   (fn localized-factory
+    ([]
+     (c-dom/create-element component))
+    ([arg]
+     (if (keyword? arg)
+       (c-dom/macro-create-element component [] arg)
+       (c-dom/macro-create-element component [arg])))
+    ([arg arg2]
+     (if (keyword? arg)
+       (c-dom/macro-create-element component [arg2] arg)
+       (c-dom/macro-create-element component [arg arg2])))
+    ([arg arg2 arg3]
+     (if (keyword? arg)
+       (c-dom/macro-create-element component [arg2 arg3] arg)
+       (c-dom/macro-create-element component [arg arg2 arg3])))
+    ([arg arg2 arg3 & rest]
+     (if (keyword? arg)
+       (c-dom/macro-create-element component (concat [arg2 arg3] rest) arg)
+       (c-dom/macro-create-element component (concat [arg arg2 arg3] rest))))))
+
+(defn component-factory-nonlocalized
+  "Wrap a react component with"
+  [component]
+  (fn nonlocalized-factory
     ([]
      (dom/create-element component))
     ([arg]
@@ -32,6 +56,7 @@
      (if (keyword? arg)
        (dom/macro-create-element component (concat [arg2 arg3] rest) arg)
        (dom/macro-create-element component (concat [arg arg2 arg3] rest))))))
+
 
 (defn component-factory-simple
   "Make a factory to build a React instance from a React class."
