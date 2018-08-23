@@ -11,7 +11,7 @@
   [props js-props]
   (js/Object.assign (js-obj) (clj->js props) js-props))
 
-(defn component-factory-localized
+(defn component-factory
   "Wrap a react component with localized css support (like on dom/*)"
   [component]
   (fn localized-factory
@@ -34,7 +34,7 @@
        (c-dom/macro-create-element component (concat [arg2 arg3] rest) arg)
        (c-dom/macro-create-element component (concat [arg arg2 arg3] rest))))))
 
-(defn component-factory-nonlocalized
+(defn component-factory-localized
   "Wrap a react component with"
   [component]
   (fn nonlocalized-factory
