@@ -14,3 +14,4 @@ pom.xml.asc
 resources/public/js
 .idea
 .iml
+fulcro-incubator.iml
