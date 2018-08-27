@@ -1,6 +1,8 @@
 # Fulcro Incubator
 
-This is a set of useful experimental features for Fulcro, consider it as an assist library.
+This is a set of experimental features/utilities for Fulcro.  As these features mature we will consider migrating them into Fulcro or forking them as first-class libraries.  In the meantime we plan on following usability practices with this library: we will largely refrain from making breaking changes/removal to anything within, but will instead generate new namespaces for variations.
+
+So, if you see something in here that you want to use: please feel free to do so.  The worst thing that can happen is it proves unpopular and you have to adopt some of it into your source base later, but that's better than having to write it from scratch, right?
 
 ## Install
 
