@@ -46,3 +46,5 @@ Then navigate to
 ```
 http://localhost:3689/
 ```
+
+You can view a precompiled version of the workspaces on [github.io](https://fulcrologic.github.io/fulcro-incubator/)
