@@ -1,4 +1,4 @@
-(defproject fulcrologic/fulcro-incubator "0.0.1"
+(defproject fulcrologic/fulcro-incubator "0.0.2"
   :description "Tools for Fulcro apps"
   :url "https://github.com/fulcrologic/fulcro-incubator"
   :license {:name "Eclipse Public License"
