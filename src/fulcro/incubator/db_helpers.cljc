@@ -29,12 +29,14 @@
      (-> (fp/db->tree query (get-in state ref) state)
          (get-in focus-path)))))
 
-(defn swap-entity! [{:keys [state ref]} & args]
-  "Swap something, starts on the current ref path."
+(defn swap-entity!
+  "Swap/`update-in` then entity whose ident is `ref` in the given env."
+  [{:keys [state ref] :as env} & args]
   (apply swap! state update-in ref args))
 
-(defn resolve-path [state path]
+(defn resolve-path
   "Walks a db path, when find an ident it resets the path to that ident. Use to realize paths of relations."
+  [state path]
   (loop [[h & t] path
          new-path []]
     (if h
@@ -45,29 +47,33 @@
           (recur t (conj new-path h))))
       new-path)))
 
-(defn swap-in! [{:keys [state ref]} path & args]
-  "Like swap! but starts at the ref from enviroment. You can use the path to
-   navigate into references, those will be resolved and the final target will
-   receive the update event."
+(defn swap-in!
+  "Like swap! but starts at the ref from `env`, adds in supplied `path` elements (resolving across idents if necessary).
+   Finally runs an update-in on that resultant path with the given `args`.
+
+   Roughly equivalent to:
+
+   ```
+   (swap! (:state env) update-in (resolve-path @state (into (:ref env) path)) args)
+   ```
+
+   with a small bit of additional sanity checking.
+   "
+  [{:keys [state ref]} path & args]
   (let [path (resolve-path @state (into ref path))]
     (if (and path (get-in @state path))
       (apply swap! state update-in path args)
       @state)))
 
-(defn merge-entity [state x data & named-parameters]
-  "Starting from a denormalized entity map, normalizes using class x.
-   It assumes the entity is going to be normalized too, then get all
-   normalized data and merge back into the app state and idents."
-  (let [idents     (-> (fp/tree->db
-                         (reify
-                           fp/IQuery
-                           (query [_] [{::root (fp/get-query x)}]))
-                         {::root data} true)
+(defn merge-entity
+  "Merge the data-tree using the query from component-class, then run integrate-ident with the names parameters."
+  [state-map component-class data-tree & integrate-ident-named-parameters]
+  (let [idents     (-> (fp/tree->db [{::root (fp/get-query component-class)}] {::root data-tree} true)
                        (dissoc ::root ::fp/tables))
-        root-ident (fp/ident x data)
-        state      (merge-with (partial merge-with merge) state idents)]
-    (if (seq named-parameters)
-      (apply fp/integrate-ident state root-ident named-parameters)
+        root-ident (fp/ident component-class data-tree)
+        state      (merge-with (partial merge-with merge) state-map idents)]
+    (if (seq integrate-ident-named-parameters)
+      (apply fp/integrate-ident state root-ident integrate-ident-named-parameters)
       state)))
 
 (defn initialized
@@ -113,24 +119,27 @@
                      (db.h/initialized))]
         (db.h/create-entity! env TodoItem todo :append ::todo-items))
   "
-  [{:keys [state ref]} x data & named-parameters]
+  [{:keys [state ref]} component-class data & named-parameters]
   (let [named-parameters (->> (partition 2 named-parameters)
                               (map (fn [[op path]] [op (conj ref path)]))
                               (apply concat))
         data'            (if (-> data meta ::initialized)
                            data
-                           (fp/get-initial-state x data))
+                           (fp/get-initial-state component-class data))
         data''           (if (empty? data') data data')]
-    (apply swap! state merge-entity x data'' named-parameters)))
+    (apply swap! state merge-entity component-class data'' named-parameters)))
 
-(defn- dissoc-in [m path]
+(defn- dissoc-in
+  "Remove the given leaf of the `path` from recursive data structure `m`"
+  [m path]
   (cond-> m
     (get-in m (butlast path))
     (update-in (butlast path) dissoc (last path))))
 
-(defn deep-remove-ref [state ref]
-  "Remove a ref and all linked refs from it."
-  (let [item   (get-in state ref)
+(defn deep-remove-ref
+  "Recursively remove a table entry (by ref) and anything it recursively points to."
+  [state-map ref]
+  (let [item   (get-in state-map ref)
         idents (into []
                      (comp (keep (fn [v]
                                    (cond
@@ -144,11 +153,13 @@
                      (vals item))]
     (reduce
       (fn [s i] (deep-remove-ref s i))
-      (dissoc-in state ref)
+      (dissoc-in state-map ref)
       idents)))
 
-(defn remove-edge! [{:keys [state ref]} field]
-  "Remove edge data from a node. This will remove the ref and all associated data with it (recursive)."
+(defn remove-edge!
+  "Given a mutation env and a field: Remove the graph edge designated by `field`, and recursively remove the data
+   for the referenced entity/ies (to-one or to-many)."
+  [{:keys [state ref] :as env} field]
   (let [children (get-in @state (conj ref field))]
     (cond
       (fulcro-ident? children)
@@ -160,13 +171,13 @@
                          #(reduce deep-remove-ref % children))))))
 
 (defn init-state
-  "Starting from an ident and query, scan the DB initializing the components. This should be used to initialize data
-  loaded from the network with fulcro fetch, this will recursively traverse using query information and merge the
-  initial state with the current data (data load from the server takes priority)."
-  ([state x ident]
-   (let [initial  (fp/get-initial-state x nil)
-         children (-> x fp/get-query fp/query->ast :children)
-         data     (fp/db->tree (fp/get-query x) (get-in state ident) state)]
+  "Fill in any declared component initial state over a just-loaded entity.  This recursively follows the query of the
+  component, calling `get-initial-state` at each level, and fills in any *missing* fields with the data from initial
+  state.  This allows a newly-fetched item to have initial state for ui-only attributes."
+  ([state component-class ident]
+   (let [initial  (fp/get-initial-state component-class nil)
+         children (-> component-class fp/get-query fp/query->ast :children)
+         data     (fp/db->tree (fp/get-query component-class) (get-in state ident) state)]
      (reduce
        (fn [s {:keys [type component key]}]
          (if (and (= :join type) component)
@@ -187,17 +198,18 @@
                :else
                s))
            s))
-       (merge-entity state x (merge initial data))
+       (merge-entity state component-class (merge initial data))
        children))))
 
-(defn vec-remove-index [i v]
+(defn vec-remove-index
   "Remove an item from a vector via index."
+  [i v]
   (->> (concat (subvec v 0 i)
                (subvec v (inc i) (count v)))
        (vec)))
 
 (defn clean-keys
-  "Set given keys to empty on current ref."
+  "Set given keys to empty strings on current ref of `env`."
   [env keys]
   (let [empty-map (zipmap keys (repeat ""))]
     (swap-entity! env merge empty-map)))
@@ -224,7 +236,8 @@
 
 ;; ALPHA APIS: the pieces below these are still in design phase and are likely to have the API changed
 
-(defn transform-remote [env ast]
+(defn transform-remote
+  [env ast]
   (let [ast (if (true? ast) (:ast env) ast)]
     (if-let [component (some-> ast :query meta :component)]
       (swap-entity! env assoc-in [::mutation-response :component] component))
@@ -232,7 +245,8 @@
         (cond-> (:query ast) (update :query vary-meta dissoc :component))
         (mutations/with-target (conj (:ref env) ::mutation-response-swap)))))
 
-(defn gen-pessimistic-mutation [sym arglist forms]
+#?(:clj
+   (defn- gen-pessimistic-mutation [sym arglist forms]
   (let [sym       sym
         ok-sym    (with-meta (symbol (str sym "-ok")) (meta sym))
         error-sym (with-meta (symbol (str sym "-error")) (meta sym))
@@ -254,7 +268,7 @@
     `(do
        (mutations/defmutation ~sym ~arglist ~@initial)
        (mutations/defmutation ~ok-sym ~arglist ~action ~@refresh)
-       ~(if error `(mutations/defmutation ~error-sym ~arglist ~(-> error next (conj 'action)))))))
+          ~(if error `(mutations/defmutation ~error-sym ~arglist ~(-> error next (conj 'action))))))))
 
 #?(:clj
    (defmacro defpmutation
@@ -323,10 +337,10 @@
           (swap-entity! env assoc ::mutation-response mutation-response-swap)
           (call-mutation-action env error-mutation input))
         (do
-          (if (:component mutation-response)
+          (when (:component mutation-response)
             (fp/merge-component! reconciler (:component mutation-response) mutation-response-swap))
 
-          (if (mutation-loading? props) (swap-entity! env dissoc ::mutation-response))
+          (when (mutation-loading? props) (swap-entity! env dissoc ::mutation-response))
 
           (call-mutation-action env ok-mutation input)))
       (swap-entity! env dissoc ::mutation-response-swap))))

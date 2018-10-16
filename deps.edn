@@ -7,7 +7,7 @@
    {org.clojure/clojure       {:mvn/version "1.9.0"}
     org.clojure/clojurescript {:mvn/version "1.10.339"}
     org.clojure/core.async    {:mvn/version "0.4.474"}
-    fulcrologic/fulcro        {:mvn/version "2.5.12"}}}
+    fulcrologic/fulcro        {:mvn/version "2.6.7"}}}
 
   :dev
   {:extra-paths
@@ -16,5 +16,5 @@
    :extra-deps
    {fulcrologic/fulcro-inspect {:mvn/version "2.2.1"}
     binaryage/devtools         {:mvn/version "0.9.10"}
-    nubank/workspaces          {:mvn/version "1.0.0-preview6"}
-    fulcrologic/fulcro-spec    {:mvn/version "2.1.0-1"}}}}}
+    nubank/workspaces          {:mvn/version "1.0.0-preview8"}
+    fulcrologic/fulcro-spec    {:mvn/version "2.1.2"}}}}}
