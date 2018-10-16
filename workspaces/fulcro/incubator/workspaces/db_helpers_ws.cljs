@@ -177,7 +177,7 @@
         :children     [{:type :prop, :dispatch-key :ui/id, :key :ui/id}
                        {:type :prop, :dispatch-key :ui/value, :key :ui/value}]}))
 
-(deftest test-gen-pessimistic-mutations
+#_(deftest test-gen-pessimistic-mutations
   (assertions
     "just remote"
     (with-redefs [gensym_counter (atom 0)]

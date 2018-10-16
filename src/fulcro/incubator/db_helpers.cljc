@@ -119,7 +119,7 @@
                      (db.h/initialized))]
         (db.h/create-entity! env TodoItem todo :append ::todo-items))
   "
-  [{:keys [state ref]} x data & named-parameters]
+  [{:keys [state ref]} component-class data & named-parameters]
   (let [named-parameters (->> (partition 2 named-parameters)
                               (map (fn [[op path]] [op (conj ref path)]))
                               (apply concat))
