@@ -1,40 +1,49 @@
-# Fulcro Incubator
+= Fulcro Incubator
 
-This is a set of experimental features/utilities for Fulcro.  As these features mature we will consider migrating them into Fulcro or forking them as first-class libraries.  In the meantime we plan on following usability practices with this library: we will largely refrain from making breaking changes/removal to anything within, but will instead generate new namespaces for variations.
+image:https://img.shields.io/clojars/v/fulcrologic/fulcro-incubator.svg[link=https://clojars.org/fulcrologic/fulcro-incubator]
+image:https://cljdoc.xyz/badge/fulcrologic/fulcro-incubator[link=https://cljdoc.xyz/d/fulcrologic/fulcro-incubator/CURRENT]
 
-So, if you see something in here that you want to use: please feel free to do so.  The worst thing that can happen is it proves unpopular and you have to adopt some of it into your source base later, but that's better than having to write it from scratch, right?
+This is a set of features/utilities for Fulcro that are considered useful but have either not yet reached maturity
+or are intended to be forked into new projects in the future.
 
-## Install
+== Can I Use Them in Production?
 
-Latest version: [![Clojars Project](https://img.shields.io/clojars/v/fulcrologic/fulcro-incubator.svg)](https://clojars.org/fulcrologic/fulcro-incubator)
+We are following a strict usability plan with this library: we will refrain from making breaking changes/removal to
+anything within, but will instead generate new namespaces for variations. This may bloat this particular library a bit,
+but will ensure you can safely use it in production environments.  Please let us know when you feel a feature
+is mature, and we'll consider accelerating promoting it to the main library or to its own smaller private project.
 
-## DB Helpers
+So, if you see something in here that you want to use: please feel free to do so.  The worst thing that can happen is
+it proves unpopular and you have to adopt some of it into your source base later, but that's better
+than having to write it from scratch, right?
+
+== DB Helpers
 
 At [`fulcro.incubator.db-helpers`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/db_helpers.cljc) you can find helper functions to deal with Fulcro local
 database map format. Those are helper functions for common operations like creating
 a new entity, recursively removing data and it's references. The documentation for the
 functions is in the code, give a scan there to check what's available.
 
-## UI
+== UI
 
 [`fulcro.incubator.ui.core`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/ui/core.cljs)
 contains functions to help using React components with Fulcro.
 
-### Reakit
+=== Reakit
 
 You can use [Reakit](https://reakit.io/) wrapped with Fulcro DOM CSS support from [`fulcro.incubator.ui.reakit`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/ui/reakit.cljs).
 
-### React Icons
+=== React Icons
 
 [React icons](http://react-icons.github.io/react-icons/) support is provided via [`fulcro.incubator.ui.icons.*`](https://github.com/fulcrologic/fulcro-incubator/tree/develop/src/fulcro/incubator/ui/icons)
 namespaces, just refer to the functions there to use the icons directly.
 
-## Shadow CLJS required
+== Shadow CLJS required
 
 Currently this library requires usage of Shadow CLJS for compilation, this is due the
 direct use of libraries from NPM that are not available in cljsjs.
 
-## Compiling workspaces
+== Compiling workspaces
 
 To explore the things here, clone this project and run:
 

@@ -221,7 +221,7 @@
 
 (mutations/defmutation multi-mutation
   "Creates a mutation that will execute a series of mutations. This can be useful to
-  setup post-mutations that compose over other mutations.
+  setup post-mutations on load that compose other mutations.
 
   Example:
 
@@ -303,19 +303,27 @@
   ([state props]
    (-> (mutation-response state props) (contains? :com.wsscode.pathom.core/mutation-errors))))
 
-(defn get-mutation [env k p]
-  (if-let [m (get (methods mutations/mutate) k)]
+(defn get-mutation
+  "Runs the side-effect-free multimethod for the given (client) mutation and returns a map describing the mutation:
+
+  {:action (fn [env] ...)
+   :remote ...}"
+  [env k p]
+  (when-let [m (get (methods mutations/mutate) k)]
     (m env k p)))
 
 (defn call-mutation-action
-  "Call a mutation action define in fulcro.client.mutations/mutate."
+  "Call a Fulcro client mutation action (defined on the multimethod fulcro.client.mutations/mutate). This
+  runs the `action` section of the mutation and returns its value."
   [env k p]
-  (if-let [h (-> (get-mutation env k p) :action)]
+  (when-let [h (-> (get-mutation env k p) :action)]
     (h)))
 
 (s/def ::mutation-response (s/keys))
 
-(mutations/defmutation mutation-network-error [{::keys [ref] :as p}]
+(mutations/defmutation mutation-network-error
+  "INTERNAL USE mutation."
+  [{::keys [ref] :as p}]
   (action [env]
     (swap-entity! (assoc env :ref ref) assoc ::mutation-response
       (-> p
@@ -323,12 +331,16 @@
           (assoc ::fp/error "Network error")))
     nil))
 
-(mutations/defmutation start-pmutation [_]
+(mutations/defmutation start-pmutation
+  "INTERNAL USE mutation."
+  [_]
   (action [env]
     (swap-entity! env assoc ::mutation-response {:fulcro.client.impl.data-fetch/type :loading})
     nil))
 
-(mutations/defmutation finish-pmutation [{:keys [ok-mutation error-mutation input]}]
+(mutations/defmutation finish-pmutation
+  "INTERNAL USE mutation."
+  [{:keys [ok-mutation error-mutation input]}]
   (action [env]
     (let [{:keys [state ref reconciler]} env
           {::keys [mutation-response mutation-response-swap] :as props} (get-in @state ref)]
@@ -345,7 +357,13 @@
           (call-mutation-action env ok-mutation input)))
       (swap-entity! env dissoc ::mutation-response-swap))))
 
-(defn pmutate! [this mutation params]
+(defn pmutate!
+  "Run a pmutation defined by `defpmutation`.
+
+  this - The component whose ident will be used for status reporting on the progress of the mutation.
+  mutation - The symbol of the mutation you want to run.
+  params - The parameter map for the mutation"
+  [this mutation params]
   (let [ok-mutation    (symbol (str mutation "-ok"))
         error-mutation (symbol (str mutation "-error"))]
     (fp/ptransact! this `[(start-pmutation {})
