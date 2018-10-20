@@ -106,12 +106,13 @@
 
 (mutations/defmutation mutation-network-error
   "INTERNAL USE mutation."
-  [{::keys [ref] :as p}]
+  [{::keys [ref ] :as p}]
   (action [env]
     (db.h/swap-entity! (assoc env :ref ref) assoc ::mutation-response
       (-> p
         (dissoc ::ref)
-        (assoc ::fp/error "Network error")))
+        (assoc ::fp/error "Network error"
+               ::mutation-errors :network-error)))
     nil))
 
 (mutations/defmutation start-pmutation
@@ -125,11 +126,13 @@
   "INTERNAL USE mutation."
   [{:keys [ok-mutation error-mutation input]}]
   (action [env]
+    (js/console.log :FINISH)
     (let [{:keys [state ref reconciler]} env
+          error-marker (select-keys input #{::error-marker})
           {::keys [mutation-response mutation-response-swap] :as props} (get-in @state ref)]
       (if (mutation-error? @state (set/rename-keys props {::mutation-response-swap ::mutation-response}))
         (do
-          (db.h/swap-entity! env assoc ::mutation-response mutation-response-swap)
+          (db.h/swap-entity! env assoc ::mutation-response (merge mutation-response mutation-response-swap error-marker))
           (call-mutation-action env error-mutation input))
         (do
           (when-let [component (get-response-component mutation-response)]
@@ -145,14 +148,20 @@
 
   this - The component whose ident will be used for status reporting on the progress of the mutation.
   mutation - The symbol of the mutation you want to run.
-  params - The parameter map for the mutation"
+  params - The parameter map for the mutation
+
+  The following special keys can be included in `params` to augment how it works:
+
+  - `:fulcro.incubator.pessimistic-mutations/error-marker any-value` -
+    This k/v pair will be in included in the ::mutation-response if is an error. This allows you to distinguish
+    errors among components that share an ident (e.g. one component causes a mutation error, but all with that ident update)."
   [this mutation params]
   (let [ok-mutation    (symbol (str mutation "-ok"))
         error-mutation (symbol (str mutation "-error"))]
     (fp/ptransact! this `[(start-pmutation {})
                           ~(list mutation params)
-                          (fulcro.client.data-fetch/fallback {:action mutation-network-error
-                                                              ::ref   ~(fp/get-ident this)})
+                          (fulcro.client.data-fetch/fallback {:action          mutation-network-error
+                                                              ::ref            ~(fp/get-ident this)})
                           (finish-pmutation ~{:ok-mutation    ok-mutation
                                               :error-mutation error-mutation
                                               :input          params})])))
