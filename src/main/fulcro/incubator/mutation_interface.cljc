@@ -1,6 +1,8 @@
 (ns fulcro.incubator.mutation-interface
   #?(:cljs (:require-macros fulcro.incubator.mutation-interface))
-  (:require [clojure.spec.alpha :as s])
+  (:require
+    [clojure.spec.alpha :as s]
+    [fulcro.client.primitives :as prim])
   #?(:clj
      (:import (clojure.lang IFn))))
 
@@ -42,3 +44,10 @@
      ([name docstring target-symbol spec]
       `(def ~(with-meta name {:doc docstring})
          (->Mutation ~target-symbol ~spec)))))
+
+#?(:clj
+   (defmacro !
+     "Forces checked mutations for the given tx vector."
+     [tx]
+     `(binding [*checked-mutations* true]
+        ~tx)))
