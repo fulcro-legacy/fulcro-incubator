@@ -29,6 +29,8 @@ NOTE: The latter half of this file has things that are migrating to pessimistic-
 
 == Pessimistic Mutations
 
+NOTE: Requires Fulcro 2.6.9-SNAPSHOT or greater.
+
 Incubator includes an API for extended pessimistic mutations. These have features like automatic loading markers,
 error state merging, and initialization help.  The functions can be found in
 
