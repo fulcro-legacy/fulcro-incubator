@@ -7,6 +7,4 @@
   :middleware [lein-tools-deps.plugin/resolve-dependencies-with-deps-edn]
   :lein-tools-deps/config {:config-files [:install :user :project]}
 
-  :source-paths ["src" "workspaces"]
-
   :jar-exclusions [#"public/.*" #"^workspaces/.*" #"\.DS_Store"])

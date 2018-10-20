@@ -255,13 +255,12 @@
          [error]   'error-action
          [refresh] 'refresh
          remotes   nil} (group-by (fn [x] (#{'action 'error-action 'pre-action 'refresh} (first x))) forms)
-        env       (gensym "env")
         refresh   (if refresh [refresh])
         remotes   (->> remotes
                        (mapv (fn [[s args & forms]]
-                               (list s [env]
-                                 `(let [~(first args) ~env]
-                                    (transform-remote ~env (do ~@forms)))))))
+                               (list s ['env]
+                                 `(let [~(first args) ~'env]
+                                    (transform-remote ~'env (do ~@forms)))))))
         action    (or action '(action [_] nil))
         pre'      (some-> pre vec (assoc 0 'action) (->> (apply list)))
         initial   (if pre (into [pre'] remotes) remotes)]
