@@ -40,8 +40,8 @@ and the workspaces have a demo (which is more revealing if you have Inspect inst
 
 The basic idea is as follows:
 
-. A mutation `pre-action` can do an optimistic change.
-. Your mutation action runs *after* the remote.
+. A mutation `action` can do an optimistic change.
+. A mutation `ok-action` runs *after* the remote completes.
 . Errors call the `error-action` part of the mutation.
 
 So, a sample pessimistic mutation looks like this:
