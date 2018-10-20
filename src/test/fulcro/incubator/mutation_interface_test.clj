@@ -16,8 +16,14 @@
   'a.b/d
   map?)
 
+(mi/declare-mutation bar 'x/bar)
+
 (deftest declaring-mutations
   (assertions
+    "Default to allowing any params when checked."
+    (mi/! (bar {:a 22})) => (list 'x/bar {:a 22})
+    (mi/! (bar)) => (list 'x/bar {})
+    (mi/! (bar {})) => (list 'x/bar {})
     "can be used to generate a mutation expression without quoting"
     (boo {:a "hello"}) => (list 'a.b/c {:a "hello"})
     "doc string is optional"
@@ -27,5 +33,4 @@
     "ignores specs without dynamic binding of *checked-mutations*"
     (boo {:a 22 :b "hello"}) => (list 'a.b/c {:a 22 :b "hello"})
     "enforces specs with dynamic binding"
-    (binding [mi/*checked-mutations* true]
-      (boo {:a 22 :b "hello"})) =throws=> {:regex #"Mutation failed spec"}))
+    (mi/! (boo {:a 22 :b "hello"})) =throws=> {:regex #"Mutation failed spec"}))

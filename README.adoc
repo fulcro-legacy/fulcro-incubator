@@ -1,0 +1,147 @@
+= Fulcro Incubator
+
+image:https://img.shields.io/clojars/v/fulcrologic/fulcro-incubator.svg[link=https://clojars.org/fulcrologic/fulcro-incubator]
+image:https://cljdoc.xyz/badge/fulcrologic/fulcro-incubator[link=https://cljdoc.xyz/d/fulcrologic/fulcro-incubator/CURRENT]
+
+This is a set of features/utilities for Fulcro that are considered useful but have either not yet reached maturity
+or are intended to be forked into new projects in the future.
+
+== Can I Use Them in Production?
+
+We are following a strict usability plan with this library: we will refrain from making breaking changes/removal to
+anything within, but will instead generate new namespaces for variations. This may bloat this particular library a bit,
+but will ensure you can safely use it in production environments.  Please let us know when you feel a feature
+is mature, and we'll consider accelerating promoting it to the main library or to its own smaller private project.
+
+So, if you see something in here that you want to use: please feel free to do so.  The worst thing that can happen is
+it proves unpopular and you have to adopt some of it into your source base later, but that's better
+than having to write it from scratch, right?
+
+== DB Helpers
+
+The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/db_helpers.cljc[`fulcro.incubator.db-helpers`]
+has helper functions to deal with Fulcro local database map format. Those are helper functions for common operations like creating
+a new entity, recursively removing data and it's references.
+
+The documentation for the functions is in the code, give a scan there to check what's available.
+
+NOTE: The latter half of this file has things that are migrating to pessimistic-mutations.  Use those instead.
+
+== Pessimistic Mutations
+
+NOTE: Requires Fulcro 2.6.9-SNAPSHOT or greater.
+
+Incubator includes an API for extended pessimistic mutations. These have features like automatic loading markers,
+error state merging, and initialization help.  The functions can be found in
+
+The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/pessimistic_mutations.cljc[`fulcro.incubator.pessimistic-mutations`].
+
+and the workspaces have a demo (which is more revealing if you have Inspect installed in Chrome and watch the app state).
+
+The basic idea is as follows:
+
+. A mutation `action` can do an optimistic change.
+. A mutation `ok-action` runs *after* the remote completes.
+. Errors call the `error-action` part of the mutation.
+
+So, a sample pessimistic mutation looks like this:
+
+```
+(ns app
+  (:require
+    [fulcro.client.mutations :as m]
+    [fulcro.incubator.pessimistic-mutations :as pm]))
+
+(m/defmutation do-something [_]
+  (action [env]
+    (js/console.log "Optimistic update (if needed)"))
+  (ok-action [env]
+    (js/console.log "Runs only if mutation is OK"))
+  (error-action [env]
+    (js/console.log "Runs if mutation fails."))
+  (remote [env] (pm/pessimistic-mutation env)))
+```
+
+and these beefed-up mutations can be run normally (in which case the ok/error actions are no-ops), but they are
+meant to be run with:
+
+```
+(pm/ptransact! this `do-something {:params 2 ::pm/error-marker :Bummer })
+```
+
+The status is automatically merged with the component that is transacted against (via it's ident), and progress is
+merged with that component along the way so that you can write UI wrappers to handle the rendering of the different states.
+
+The data merged into your component will be under the key `::pm/mutation-response`.
+
+It can have the following general shapes (work-in-progress):
+
+OK:: The key will not be there.
+
+In progress:: your component's state will include:
+
+```
+::pm/mutation-response {::pm/status :loading }
+```
+
+The status field will always be present as long as the mutation response is present. The mutation response is removed
+once a successful interaction is complete.
+
+API Failure:: (The mutation on the remote returned a map containing the key ::i.pm/mutation-errors):
+
+```
+::pm/mutation-response {
+  ...                              ; All of the things your mutation returned will be merged into this map
+  ::pm/status :api-error           ; YOUR API's contained the key ::pm/mutation-errors
+  ::pm/error-marker :Bummer        ; This is the marker set when you originally called pmutate!
+  ::pm/mutation-errors :error-33}  ; this came from your server mutation
+```
+
+where the error marker is a user-definable bit of data that you set up when you start the tx, and mutations-errors is
+part of what the API call on the server returned.
+
+Hard Failure:: The server threw an exception or the network is down.
+
+```
+::pm/mutation-response {
+  ::pm/status :hard-error                        ; network problem or exception thrown on server
+  ::pm/error-marker :Bummer                      ; your custom marker, if set
+  ::pm/low-level-error #error {:message "!!!"}   ; error detail (if available)
+  :fulcro.client.primitives/ref [:demo/id 1]}    ;ident of transacting component
+```
+
+== UI
+
+[`fulcro.incubator.ui.core`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/ui/core.cljs)
+contains functions to help using React components with Fulcro.
+
+=== Reakit
+
+You can use [Reakit](https://reakit.io/) wrapped with Fulcro DOM CSS support from [`fulcro.incubator.ui.reakit`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/ui/reakit.cljs).
+
+=== React Icons
+
+[React icons](http://react-icons.github.io/react-icons/) support is provided via [`fulcro.incubator.ui.icons.*`](https://github.com/fulcrologic/fulcro-incubator/tree/develop/src/main/fulcro/incubator/ui/icons)
+namespaces, just refer to the functions there to use the icons directly.
+
+== Shadow CLJS required
+
+Currently this library requires usage of Shadow CLJS for compilation, this is due the
+direct use of libraries from NPM that are not available in cljsjs.
+
+== Compiling workspaces
+
+To explore the things here, clone this project and run:
+
+```
+npm install
+npx shadow-cljs watch workspaces
+```
+
+Then navigate to
+
+```
+http://localhost:3689/
+```
+
+You can view a precompiled version of the workspaces on [github.io](https://fulcrologic.github.io/fulcro-incubator/)

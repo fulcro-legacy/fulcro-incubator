@@ -80,14 +80,14 @@
 (deftest init-state
   (assertions
     "Works on simple cases"
-    (db.h/init-state {:customer/id {123 {:customer/id 123}}} Customer [:customer/id 123])
+    (db.h/init-loaded-state* {:customer/id {123 {:customer/id 123}}} Customer [:customer/id 123])
     => {:customer/id {123 {:customer/id 123
                            :ui/bla      "meh"}}}
 
     "Initialize to-one relations, and auto initialize ui joins"
-    (db.h/init-state {:customer/id  {333 {:customer/id 333
-                                          :something   [:something/id 111]}}
-                      :something/id {111 {:something/id 111}}} Customer [:customer/id 333])
+    (db.h/init-loaded-state* {:customer/id {333 {:customer/id 333
+                                          :something          [:something/id 111]}}
+                      :something/id        {111 {:something/id 111}}} Customer [:customer/id 333])
     => {:customer/id  {333 {:customer/id 333
                             :something   [:something/id 111]
                             :ui/bla      "meh"}}
@@ -98,10 +98,10 @@
                              :ui/value :bar}}}
 
     "Initialize to-many relations"
-    (db.h/init-state {:customer/id  {333 {:customer/id 333
-                                          :many        [[:something/id 111]
+    (db.h/init-loaded-state* {:customer/id {333 {:customer/id 333
+                                          :many               [[:something/id 111]
                                                         [:something/id 222]]}}
-                      :something/id {111 {:something/id 111}
+                      :something/id        {111 {:something/id 111}
                                      222 {:something/id 222}}}
       Customer [:customer/id 333])
     => {:customer/id  {333 {:customer/id 333
@@ -177,125 +177,4 @@
         :children     [{:type :prop, :dispatch-key :ui/id, :key :ui/id}
                        {:type :prop, :dispatch-key :ui/value, :key :ui/value}]}))
 
-#_(deftest test-gen-pessimistic-mutations
-  (assertions
-    "just remote"
-    (with-redefs [gensym_counter (atom 0)]
-      (db.h/gen-pessimistic-mutation 'my-mutation '[args]
-        '((remote [_] true))))
-    => '(do
-          (fulcro.client.mutations/defmutation my-mutation [args]
-            (remote
-              [env1]
-              (clojure.core/let [_ env1]
-                (fulcro.incubator.db-helpers/transform-remote
-                  env1
-                  (do true)))))
 
-          (fulcro.client.mutations/defmutation my-mutation-ok [args]
-            (action [_] nil))
-
-          nil)
-
-    "generate simple pessimist mutation"
-    (with-redefs [gensym_counter (atom 0)]
-      (db.h/gen-pessimistic-mutation 'my-mutation '[args]
-        '((action [env] nil)
-           (remote [_] true))))
-    => '(do
-          (fulcro.client.mutations/defmutation my-mutation [args]
-            (remote
-              [env1]
-              (clojure.core/let [_ env1]
-                (fulcro.incubator.db-helpers/transform-remote
-                  env1
-                  (do true)))))
-
-          (fulcro.client.mutations/defmutation my-mutation-ok [args]
-            (action [env] nil))
-
-          nil)
-
-    "handle refresh"
-    (with-redefs [gensym_counter (atom 0)]
-      (db.h/gen-pessimistic-mutation 'my-mutation '[args]
-        '((refresh [_] [:refresh-attr])
-           (remote [_] true))))
-    => '(do
-          (fulcro.client.mutations/defmutation my-mutation [args]
-            (remote
-              [env1]
-              (clojure.core/let [_ env1]
-                (fulcro.incubator.db-helpers/transform-remote
-                  env1
-                  (do true)))))
-
-          (fulcro.client.mutations/defmutation my-mutation-ok [args]
-            (action [_] nil)
-            (refresh [_] [:refresh-attr]))
-
-          nil)
-
-    "generates error handler"
-    (with-redefs [gensym_counter (atom 0)]
-      (db.h/gen-pessimistic-mutation 'my-mutation '[args]
-        '((error-action [env] nil)
-           (remote [_] true))))
-    => '(do
-          (fulcro.client.mutations/defmutation my-mutation [args]
-            (remote
-              [env1]
-              (clojure.core/let [_ env1]
-                (fulcro.incubator.db-helpers/transform-remote
-                  env1
-                  (do true)))))
-
-          (fulcro.client.mutations/defmutation my-mutation-ok [args]
-            (action [_] nil))
-
-          (fulcro.client.mutations/defmutation my-mutation-error [args]
-            (action [env] nil)))
-
-    "generate simple pessimist mutation with pre"
-    (with-redefs [gensym_counter (atom 0)]
-      (db.h/gen-pessimistic-mutation 'my-mutation '[args]
-        '((pre-action [env] nil)
-           (action [env] nil)
-           (remote [_] true))))
-    => '(do
-          (fulcro.client.mutations/defmutation my-mutation [args]
-            (action [env] nil)
-            (remote
-              [env1]
-              (clojure.core/let [_ env1]
-                (fulcro.incubator.db-helpers/transform-remote
-                  env1
-                  (do true)))))
-
-          (fulcro.client.mutations/defmutation my-mutation-ok [args]
-            (action [env] nil))
-
-          nil)
-
-    "generate with all handlers"
-    (with-redefs [gensym_counter (atom 0)]
-      (db.h/gen-pessimistic-mutation 'my-mutation '[args]
-        '((pre-action [env] :pre)
-           (action [env] :action)
-           (error-action [env] :error)
-           (remote [_] true))))
-    => '(do
-          (fulcro.client.mutations/defmutation my-mutation [args]
-            (action [env] :pre)
-            (remote
-              [env1]
-              (clojure.core/let [_ env1]
-                (fulcro.incubator.db-helpers/transform-remote
-                  env1
-                  (do true)))))
-
-          (fulcro.client.mutations/defmutation my-mutation-ok [args]
-            (action [env] :action))
-
-          (fulcro.client.mutations/defmutation my-mutation-error [args]
-            (action [env] :error)))))
