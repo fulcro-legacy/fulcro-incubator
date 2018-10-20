@@ -80,14 +80,14 @@
 (deftest init-state
   (assertions
     "Works on simple cases"
-    (db.h/init-state {:customer/id {123 {:customer/id 123}}} Customer [:customer/id 123])
+    (db.h/init-loaded-state* {:customer/id {123 {:customer/id 123}}} Customer [:customer/id 123])
     => {:customer/id {123 {:customer/id 123
                            :ui/bla      "meh"}}}
 
     "Initialize to-one relations, and auto initialize ui joins"
-    (db.h/init-state {:customer/id  {333 {:customer/id 333
-                                          :something   [:something/id 111]}}
-                      :something/id {111 {:something/id 111}}} Customer [:customer/id 333])
+    (db.h/init-loaded-state* {:customer/id {333 {:customer/id 333
+                                          :something          [:something/id 111]}}
+                      :something/id        {111 {:something/id 111}}} Customer [:customer/id 333])
     => {:customer/id  {333 {:customer/id 333
                             :something   [:something/id 111]
                             :ui/bla      "meh"}}
@@ -98,10 +98,10 @@
                              :ui/value :bar}}}
 
     "Initialize to-many relations"
-    (db.h/init-state {:customer/id  {333 {:customer/id 333
-                                          :many        [[:something/id 111]
+    (db.h/init-loaded-state* {:customer/id {333 {:customer/id 333
+                                          :many               [[:something/id 111]
                                                         [:something/id 222]]}}
-                      :something/id {111 {:something/id 111}
+                      :something/id        {111 {:something/id 111}
                                      222 {:something/id 222}}}
       Customer [:customer/id 333])
     => {:customer/id  {333 {:customer/id 333

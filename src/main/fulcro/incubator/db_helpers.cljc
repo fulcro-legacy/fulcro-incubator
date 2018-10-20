@@ -8,8 +8,8 @@
 
 (defn- fulcro-ident? [x]
   (and (vector? x)
-       (= 2 (count x))
-       (keyword? (first x))))
+    (= 2 (count x))
+    (keyword? (first x))))
 
 (defn query-component
   "Run a query against a component with ident. If you provide a path on
@@ -27,7 +27,7 @@
          state     (-> this fp/get-reconciler fp/app-state deref)
          query     (fp/focus-query (fp/get-query component) focus-path)]
      (-> (fp/db->tree query (get-in state ref) state)
-         (get-in focus-path)))))
+       (get-in focus-path)))))
 
 (defn swap-entity!
   "Swap/`update-in` then entity whose ident is `ref` in the given env."
@@ -65,20 +65,40 @@
       (apply swap! state update-in path args)
       @state)))
 
-(defn merge-entity
+(defn merge-entity*
   "Merge the data-tree using the query from component-class, then run integrate-ident with the names parameters."
   [state-map component-class data-tree & integrate-ident-named-parameters]
   (let [idents     (-> (fp/tree->db [{::root (fp/get-query component-class)}] {::root data-tree} true)
-                       (dissoc ::root ::fp/tables))
+                     (dissoc ::root ::fp/tables))
         root-ident (fp/ident component-class data-tree)
         state      (merge-with (partial merge-with merge) state-map idents)]
     (if (seq integrate-ident-named-parameters)
-      (apply fp/integrate-ident state root-ident integrate-ident-named-parameters)
+      (apply mutations/integrate-ident* state root-ident integrate-ident-named-parameters)
       state)))
 
+(def ^:deprecated merge-entity "DEPRECATED. Use merge-entity*" merge-entity*)
+
 (defn initialized
-  "Mark data as initialized so the value is not augmented via initial state."
+  "Mark `data` so that the value is not augmented via get-initial-state merging when using create-entity* and create-entity!"
   [data] (vary-meta data assoc ::initialized true))
+
+(defn create-entity*
+  "Mutation helper.  Create a new instance of the given component class. This differs from Fulcro's standard
+  merge-component because it combines the `data` with the component's initial state.
+
+  The named-parameters are passed to Fulcro integrate-ident* to add the ident of the new entity into other parts
+  of your app state.
+
+  See create-entity!"
+  [state-map component-class data & named-parameters]
+  (let [named-parameters (->> (partition 2 named-parameters)
+                           (map (fn [[op path]] [op (conj ref path)]))
+                           (apply concat))
+        data'            (if (-> data meta ::initialized)
+                           data
+                           (fp/get-initial-state component-class data))
+        data''           (if (empty? data') data data')]
+    (apply merge-entity* state-map component-class data'' named-parameters)))
 
 (defn create-entity!
   "Create a new entity on the database for a given component. Example:
@@ -120,14 +140,7 @@
         (db.h/create-entity! env TodoItem todo :append ::todo-items))
   "
   [{:keys [state ref]} component-class data & named-parameters]
-  (let [named-parameters (->> (partition 2 named-parameters)
-                              (map (fn [[op path]] [op (conj ref path)]))
-                              (apply concat))
-        data'            (if (-> data meta ::initialized)
-                           data
-                           (fp/get-initial-state component-class data))
-        data''           (if (empty? data') data data')]
-    (apply swap! state merge-entity component-class data'' named-parameters)))
+  (apply swap! state create-entity* component-class data named-parameters))
 
 (defn- dissoc-in
   "Remove the given leaf of the `path` from recursive data structure `m`"
@@ -136,25 +149,27 @@
     (get-in m (butlast path))
     (update-in (butlast path) dissoc (last path))))
 
-(defn deep-remove-ref
-  "Recursively remove a table entry (by ref) and anything it recursively points to."
-  [state-map ref]
-  (let [item   (get-in state-map ref)
+(defn deep-remove-entity*
+  "Recursively remove a table entry (by ident) and anything it recursively points to."
+  [state-map ident]
+  (let [item   (get-in state-map ident)
         idents (into []
-                     (comp (keep (fn [v]
-                                   (cond
-                                     (fulcro-ident? v)
-                                     [v]
+                 (comp (keep (fn [v]
+                               (cond
+                                 (fulcro-ident? v)
+                                 [v]
 
-                                     (and (vector? v)
-                                          (every? fulcro-ident? v))
-                                     v)))
-                           cat)
-                     (vals item))]
+                                 (and (vector? v)
+                                   (every? fulcro-ident? v))
+                                 v)))
+                   cat)
+                 (vals item))]
     (reduce
-      (fn [s i] (deep-remove-ref s i))
-      (dissoc-in state-map ref)
+      (fn [s i] (deep-remove-entity* s i))
+      (dissoc-in state-map ident)
       idents)))
+
+(def ^:deprecated deep-remove-ref "DEPRECATED: Use deep-remote-entity*" deep-remove-entity*)
 
 (defn remove-edge!
   "Given a mutation env and a field: Remove the graph edge designated by `field`, and recursively remove the data
@@ -164,13 +179,13 @@
     (cond
       (fulcro-ident? children)
       (swap! state (comp #(update-in % ref dissoc field)
-                         #(deep-remove-ref % children)))
+                     #(deep-remove-entity* % children)))
 
       (seq children)
       (swap! state (comp #(assoc-in % (conj ref field) [])
-                         #(reduce deep-remove-ref % children))))))
+                     #(reduce deep-remove-entity* % children))))))
 
-(defn init-state
+(defn init-loaded-state*
   "Fill in any declared component initial state over a just-loaded entity.  This recursively follows the query of the
   component, calling `get-initial-state` at each level, and fills in any *missing* fields with the data from initial
   state.  This allows a newly-fetched item to have initial state for ui-only attributes."
@@ -184,13 +199,13 @@
            (let [value (get-in state (conj ident key))]
              (cond
                (fulcro-ident? value)
-               (init-state s component value)
+               (init-loaded-state* s component value)
 
                (vector? value)
                (reduce
                  (fn [s ident]
                    (if (fulcro-ident? ident)
-                     (init-state s component ident)
+                     (init-loaded-state* s component ident)
                      s))
                  s
                  value)
@@ -198,15 +213,17 @@
                :else
                s))
            s))
-       (merge-entity state component-class (merge initial data))
+       (merge-entity* state component-class (merge initial data))
        children))))
+
+(def ^:deprecated init-state "DEPRECATED: use init-loaded-state*" init-loaded-state*)
 
 (defn vec-remove-index
   "Remove an item from a vector via index."
   [i v]
   (->> (concat (subvec v 0 i)
-               (subvec v (inc i) (count v)))
-       (vec)))
+         (subvec v (inc i) (count v)))
+    (vec)))
 
 (defn clean-keys
   "Set given keys to empty strings on current ref of `env`."
@@ -214,10 +231,15 @@
   (let [empty-map (zipmap keys (repeat ""))]
     (swap-entity! env merge empty-map)))
 
-(mutations/defmutation init-loaded-state [{:keys [ref component]}]
+(mutations/defmutation init-loaded-state
+  "Mutation: fills in just-loaded components with data from `get-initial-state`, *without* overwriting anything
+  that is already there. This is useful to add defaults for things like :ui/... attributes on your components that
+  just came in from a server and had no initial UI state.  See `init-state` for a version you can use in your
+  mutations."
+  [{:keys [ref component]}]
   (action [env]
     (let [{:keys [state]} env]
-      (swap! state init-state component ref))))
+      (swap! state init-loaded-state* component ref))))
 
 (mutations/defmutation multi-mutation
   "Creates a mutation that will execute a series of mutations. This can be useful to
@@ -236,37 +258,42 @@
 
 ;; ALPHA APIS: the pieces below these are still in design phase and are likely to have the API changed
 
+;; a safe way to save component in app state
+(defn- response-component [component] (with-meta {} {:component component}))
+(defn- get-response-component [response] (-> response :component meta :component))
+
 (defn transform-remote
+  "A helper function that you should not use. "
   [env ast]
   (let [ast (if (true? ast) (:ast env) ast)]
     (if-let [component (some-> ast :query meta :component)]
-      (swap-entity! env assoc-in [::mutation-response :component] component))
+      (swap-entity! env assoc-in [::mutation-response :component] (response-component component)))
     (-> ast
-        (cond-> (:query ast) (update :query vary-meta dissoc :component))
-        (mutations/with-target (conj (:ref env) ::mutation-response-swap)))))
+      (cond-> (:query ast) (update :query vary-meta dissoc :component))
+      (mutations/with-target (conj (:ref env) ::mutation-response-swap)))))
 
 #?(:clj
    (defn- gen-pessimistic-mutation [sym arglist forms]
-  (let [sym       sym
-        ok-sym    (with-meta (symbol (str sym "-ok")) (meta sym))
-        error-sym (with-meta (symbol (str sym "-error")) (meta sym))
-        {[pre]     'pre-action
-         [action]  'action
-         [error]   'error-action
-         [refresh] 'refresh
-         remotes   nil} (group-by (fn [x] (#{'action 'error-action 'pre-action 'refresh} (first x))) forms)
-        refresh   (if refresh [refresh])
-        remotes   (->> remotes
+     (let [sym       sym
+           ok-sym    (with-meta (symbol (str sym "-ok")) (meta sym))
+           error-sym (with-meta (symbol (str sym "-error")) (meta sym))
+           {[pre]     'pre-action
+            [action]  'action
+            [error]   'error-action
+            [refresh] 'refresh
+            remotes   nil} (group-by (fn [x] (#{'action 'error-action 'pre-action 'refresh} (first x))) forms)
+           refresh   (if refresh [refresh])
+           remotes   (->> remotes
                        (mapv (fn [[s args & forms]]
                                (list s ['env]
                                  `(let [~(first args) ~'env]
                                     (transform-remote ~'env (do ~@forms)))))))
-        action    (or action '(action [_] nil))
-        pre'      (some-> pre vec (assoc 0 'action) (->> (apply list)))
-        initial   (if pre (into [pre'] remotes) remotes)]
-    `(do
-       (mutations/defmutation ~sym ~arglist ~@initial)
-       (mutations/defmutation ~ok-sym ~arglist ~action ~@refresh)
+           action    (or action '(action [_] nil))
+           pre'      (some-> pre vec (assoc 0 'action) (->> (apply list)))
+           initial   (if pre (into [pre'] remotes) remotes)]
+       `(do
+          (mutations/defmutation ~sym ~arglist ~@initial)
+          (mutations/defmutation ~ok-sym ~arglist ~action ~@refresh)
           ~(if error `(mutations/defmutation ~error-sym ~arglist ~(-> error next (conj 'action))))))))
 
 #?(:clj
@@ -284,6 +311,7 @@
      :args (s/cat :sym symbol? :args vector? :forms (s/+ list?))))
 
 (defn mutation-response
+  "Retrieves the mutation response from `this` component.  Can also be used against the state-map with an ident."
   ([this]
    (if (fp/component? this)
      (mutation-response (-> this fp/get-reconciler fp/app-state deref) (fp/props this))
@@ -292,11 +320,15 @@
    (let [response (-> props ::mutation-response)]
      (if (fulcro.util/ident? response) (get-in state response) response))))
 
-(defn mutation-loading? [this]
+(defn mutation-loading?
+  "Checks this props of `this` component to see if a mutation is in progress."
+  [this]
   (let [props (cond-> this (fp/component? this) fp/props)]
     (-> props ::mutation-response (fetch/loading?))))
 
 (defn mutation-error?
+  "Is the mutation in error. This version assumes you use :com.wsscode.pathom.core/mutation-errors as a key in your
+  response to indicate an error."
   ([this]
    (-> (mutation-response this) (contains? :com.wsscode.pathom.core/mutation-errors)))
   ([state props]
@@ -326,8 +358,8 @@
   (action [env]
     (swap-entity! (assoc env :ref ref) assoc ::mutation-response
       (-> p
-          (dissoc ::ref)
-          (assoc ::fp/error "Network error")))
+        (dissoc ::ref)
+        (assoc ::fp/error "Network error")))
     nil))
 
 (mutations/defmutation start-pmutation
@@ -348,8 +380,8 @@
           (swap-entity! env assoc ::mutation-response mutation-response-swap)
           (call-mutation-action env error-mutation input))
         (do
-          (when (:component mutation-response)
-            (fp/merge-component! reconciler (:component mutation-response) mutation-response-swap))
+          (when-let [component (get-response-component mutation-response)]
+            (fp/merge-component! reconciler component mutation-response-swap))
 
           (when (mutation-loading? props) (swap-entity! env dissoc ::mutation-response))
 
