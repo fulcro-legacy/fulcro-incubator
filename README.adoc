@@ -1,0 +1,73 @@
+= Fulcro Incubator
+
+image:https://img.shields.io/clojars/v/fulcrologic/fulcro-incubator.svg[link=https://clojars.org/fulcrologic/fulcro-incubator]
+image:https://cljdoc.xyz/badge/fulcrologic/fulcro-incubator[link=https://cljdoc.xyz/d/fulcrologic/fulcro-incubator/CURRENT]
+
+This is a set of features/utilities for Fulcro that are considered useful but have either not yet reached maturity
+or are intended to be forked into new projects in the future.
+
+== Can I Use Them in Production?
+
+We are following a strict usability plan with this library: we will refrain from making breaking changes/removal to
+anything within, but will instead generate new namespaces for variations. This may bloat this particular library a bit,
+but will ensure you can safely use it in production environments.  Please let us know when you feel a feature
+is mature, and we'll consider accelerating promoting it to the main library or to its own smaller private project.
+
+So, if you see something in here that you want to use: please feel free to do so.  The worst thing that can happen is
+it proves unpopular and you have to adopt some of it into your source base later, but that's better
+than having to write it from scratch, right?
+
+== DB Helpers
+
+The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/db_helpers.cljc[`fulcro.incubator.db-helpers`]
+has helper functions to deal with Fulcro local database map format. Those are helper functions for common operations like creating
+a new entity, recursively removing data and it's references.
+
+The documentation for the functions is in the code, give a scan there to check what's available.
+
+NOTE: The latter half of this file has things that are migrating to pessimistic-mutations.  Use those instead.
+
+== Pessimistic Mutations
+
+Incubator includes an API for extended pessimistic mutations. These have features like automatic loading markers,
+error state merging, and initialization help.  The functions can be found in
+
+The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/pessimistic_mutations.cljc[`fulcro.incubator.pessimistic-mutations`].
+
+and the workspaces have a demo (which is more revealing if you have Inspect installed in Chrome and watch the app state).
+
+== UI
+
+[`fulcro.incubator.ui.core`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/ui/core.cljs)
+contains functions to help using React components with Fulcro.
+
+=== Reakit
+
+You can use [Reakit](https://reakit.io/) wrapped with Fulcro DOM CSS support from [`fulcro.incubator.ui.reakit`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/ui/reakit.cljs).
+
+=== React Icons
+
+[React icons](http://react-icons.github.io/react-icons/) support is provided via [`fulcro.incubator.ui.icons.*`](https://github.com/fulcrologic/fulcro-incubator/tree/develop/src/fulcro/incubator/ui/icons)
+namespaces, just refer to the functions there to use the icons directly.
+
+== Shadow CLJS required
+
+Currently this library requires usage of Shadow CLJS for compilation, this is due the
+direct use of libraries from NPM that are not available in cljsjs.
+
+== Compiling workspaces
+
+To explore the things here, clone this project and run:
+
+```
+npm install
+npx shadow-cljs watch workspaces
+```
+
+Then navigate to
+
+```
+http://localhost:3689/
+```
+
+You can view a precompiled version of the workspaces on [github.io](https://fulcrologic.github.io/fulcro-incubator/)
