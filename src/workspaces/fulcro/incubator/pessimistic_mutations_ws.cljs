@@ -2,6 +2,7 @@
   (:require
     [nubank.workspaces.core :as ws]
     [fulcro.client.primitives :as fp :refer [defsc]]
+    [fulcro.client.mutations :refer [defmutation]]
     [fulcro.server :as server]
     [fulcro-spec.core :refer [specification assertions]]
     [fulcro.incubator.pessimistic-mutations :as i.pm]
@@ -22,30 +23,33 @@
   (action [env]
     {::i.pm/mutation-errors :error-33}))
 
-(i.pm/defpmutation do-something-good [_]
-  (pre-action [env]
-    (js/console.log "Ran before remote mutation"))
+(defmutation do-something-good [_]
   (action [env]
-    (js/console.log "Remote OK. Local action runs after remote."))
-  (remote [_] true))
-
-(i.pm/defpmutation do-something-bad [_]
-  (pre-action [env]
-    (js/console.log "Ran before remote mutation"))
-  (action [env]
-    (js/console.log "MUTATION OK. Local Action happens AFTER remote interaction"))
+    (js/console.log "Optimistic"))
+  (ok-action [env]
+    (js/console.log "OK Done"))
   (error-action [env]
     (js/console.log "Ran due to error"))
-  (remote [_] true))
+  (remote [env] (i.pm/pessimistic-remote env)))
 
-(i.pm/defpmutation do-something-sorta-bad [_]
-  (pre-action [env]
-    (js/console.log "Ran before remote mutation"))
+(defmutation do-something-bad [_]
   (action [env]
-    (js/console.log "Ran optimistically"))
+    (js/console.log "Optimistic"))
+  (ok-action [env]
+    (js/console.log "OK Done"))
   (error-action [env]
     (js/console.log "Ran due to error"))
-  (remote [_] true))
+  (remote [env] (i.pm/pessimistic-remote env)))
+
+
+(defmutation do-something-sorta-bad [_]
+  (action [env]
+    (js/console.log "Optimistic"))
+  (ok-action [env]
+    (js/console.log "OK Done"))
+  (error-action [env]
+    (js/console.log "Ran due to error"))
+  (remote [env] (i.pm/pessimistic-remote env)))
 
 (defsc DemoComponent [this props]
   {:query         [:demo/id :ui/checked?]
