@@ -36,6 +36,64 @@ The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro
 
 and the workspaces have a demo (which is more revealing if you have Inspect installed in Chrome and watch the app state).
 
+The basic idea is as follows:
+
+. A mutation `pre-action` can do an optimistic change.
+. Your mutation action runs *after* the remote.
+. Errors call the `error-action` part of the mutation.
+
+So, a sample pessimistic mutation looks like this:
+
+```
+(i.pm/defpmutation do-something [_]
+  (pre-action [env]
+    (js/console.log "Ran before remote mutation"))
+  (action [env]
+    (js/console.log "MUTATION OK. Local Action happens AFTER remote interaction only if it is OK."))
+  (error-action [env]
+    (js/console.log "Ran due to error."))
+  (remote [_] true))
+```
+
+The status is automatically merged with the component that is transacted against (via it's ident), and progress is
+merged with that component along the way so that you can write wrappers to handle the rendering of the different states.
+
+The data merged into your component will be under the key `:fulcro.incubator.pessimistic-mutations/mutation-response`.
+
+It can have the following general shapes:
+
+OK:: The key will not be there.
+
+In progress:: your component's state will include:
+
+```
+:fulcro.incubator.pessimistic-mutations/mutation-response { :fulcro.client.impl.data-fetch/type :loading }
+```
+
+API Failure:: (The mutation on the remote returned a map containing the key ::i.pm/mutation-errors):
+
+```
+:fulcro.incubator.pessimistic-mutations/mutation-response {
+  :fulcro.incubator.pessimistic-mutations/error-marker :Bummer
+  :fulcro.incubator.pessimistic-mutations/mutation-errors :error-33}
+```
+
+where the error marker is a user-definable bit of data that you set up when you start the tx, and mutations-errors is
+what the API call placed in the response of the mutation.
+
+Hard Failure:: The server threw and exception or the network is down.
+
+```
+:fulcro.incubator.pessimistic-mutations/mutation-response {
+  :error {:fulcro.client.primitives/error #error {:message "You screwed up!!!", :data {}}}
+  :fulcro.client.primitives/error "Network error"
+  :fulcro.client.primitives/ref   [:demo/id 1]
+  :fulcro.incubator.pessimistic-mutations/mutation-errors :network-error}}
+```
+
+The main one to look for is the last one, which will not change.  The other keys are still under refinement, but currently
+the actual network error from the server (when an `ex-info` is thrown) is in the nested `:error` map.
+
 == UI
 
 [`fulcro.incubator.ui.core`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/ui/core.cljs)

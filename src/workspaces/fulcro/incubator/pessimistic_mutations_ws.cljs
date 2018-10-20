@@ -10,6 +10,18 @@
     [nubank.workspaces.card-types.fulcro :as ct.fulcro]
     [nubank.workspaces.lib.fulcro-portal :as f.portal]))
 
+(server/defmutation do-something-good [_]
+  (action [env]
+    (js/console.log "server do something good")))
+
+(server/defmutation do-something-bad [_]
+  (action [env]
+    (throw (ex-info "You screwed up!!!" {}))))
+
+(server/defmutation do-something-sorta-bad [_]
+  (action [env]
+    {::i.pm/mutation-errors :error-33}))
+
 (i.pm/defpmutation do-something-good [_]
   (pre-action [env]
     (js/console.log "Ran before remote mutation"))
