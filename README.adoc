@@ -19,7 +19,7 @@ than having to write it from scratch, right?
 
 == DB Helpers
 
-The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/db_helpers.cljc[`fulcro.incubator.db-helpers`]
+The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/db_helpers.cljc[`fulcro.incubator.db-helpers`]
 has helper functions to deal with Fulcro local database map format. Those are helper functions for common operations like creating
 a new entity, recursively removing data and it's references.
 
@@ -32,22 +32,22 @@ NOTE: The latter half of this file has things that are migrating to pessimistic-
 Incubator includes an API for extended pessimistic mutations. These have features like automatic loading markers,
 error state merging, and initialization help.  The functions can be found in
 
-The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/pessimistic_mutations.cljc[`fulcro.incubator.pessimistic-mutations`].
+The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/pessimistic_mutations.cljc[`fulcro.incubator.pessimistic-mutations`].
 
 and the workspaces have a demo (which is more revealing if you have Inspect installed in Chrome and watch the app state).
 
 == UI
 
-[`fulcro.incubator.ui.core`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/ui/core.cljs)
+[`fulcro.incubator.ui.core`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/ui/core.cljs)
 contains functions to help using React components with Fulcro.
 
 === Reakit
 
-You can use [Reakit](https://reakit.io/) wrapped with Fulcro DOM CSS support from [`fulcro.incubator.ui.reakit`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/ui/reakit.cljs).
+You can use [Reakit](https://reakit.io/) wrapped with Fulcro DOM CSS support from [`fulcro.incubator.ui.reakit`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/ui/reakit.cljs).
 
 === React Icons
 
-[React icons](http://react-icons.github.io/react-icons/) support is provided via [`fulcro.incubator.ui.icons.*`](https://github.com/fulcrologic/fulcro-incubator/tree/develop/src/fulcro/incubator/ui/icons)
+[React icons](http://react-icons.github.io/react-icons/) support is provided via [`fulcro.incubator.ui.icons.*`](https://github.com/fulcrologic/fulcro-incubator/tree/develop/src/main/fulcro/incubator/ui/icons)
 namespaces, just refer to the functions there to use the icons directly.
 
 == Shadow CLJS required
