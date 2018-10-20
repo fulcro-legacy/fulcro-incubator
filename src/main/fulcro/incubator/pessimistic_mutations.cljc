@@ -15,6 +15,8 @@
 (defn- response-component [component] (with-meta {} {:component component}))
 (defn- get-response-component [response] (-> response :component meta :component))
 
+(def error-states #{:api-error :network-error})
+
 (defn pessimistic-mutation
   "You must call this function in the remote of mutations that are used with `pmutate!`.
 
@@ -39,18 +41,25 @@
    (let [response (-> props ::mutation-response)]
      (if (fulcro.util/ident? response) (get-in state response) response))))
 
+(defn- mutation-status
+  ([state props]
+   (let [response (mutation-response state props)]
+     (-> response ::status)))
+  ([this]
+   (let [props (cond-> this (fp/component? this) fp/props)]
+     (-> props ::mutation-response ::status))))
+
 (defn mutation-loading?
   "Checks this props of `this` component to see if a mutation is in progress."
   [this]
-  (let [props (cond-> this (fp/component? this) fp/props)]
-    (-> props ::mutation-response (fetch/loading?))))
+  (= :loading (mutation-status this)))
 
 (defn mutation-error?
   "Is the mutation in error. This is detected by looking for ::mutation-errors in the ::mutation-response (map) returned by the mutation."
   ([this]
-   (-> (mutation-response this) (contains? ::mutation-errors)))
+   (contains? error-states (mutation-status this)))
   ([state props]
-   (-> (mutation-response state props) (contains? ::mutation-errors))))
+   (contains? error-states (mutation-status state props))))
 
 (defn get-mutation
   "Runs the side-effect-free multimethod for the given (client) mutation and returns a map describing the mutation:
@@ -74,20 +83,23 @@
 
 (mutations/defmutation mutation-network-error
   "INTERNAL USE mutation."
-  [{::keys [mutation ref] :as p}]
+  [{:keys  [error input]
+    ::keys [ref] :as p}]
   (action [env]
-    (db.h/swap-entity! (assoc env :ref ref) assoc ::mutation-response
-      (-> p
-        (dissoc ::ref)
-        (assoc ::fp/error "Network error"
-               ::mutation-errors :network-error)))
+    (let [low-level-error (some-> error first second :fulcro.client.primitives/error)
+          {::keys [error-marker]} input]
+      (db.h/swap-entity! (assoc env :ref ref) assoc ::mutation-response
+        (cond-> (dissoc p ::ref :error :input)
+          :always (assoc ::status :hard-error)
+          error-marker (assoc ::error-marker error-marker)
+          low-level-error (assoc ::low-level-error low-level-error))))
     nil))
 
 (mutations/defmutation start-pmutation
   "INTERNAL USE mutation."
   [_]
   (action [env]
-    (db.h/swap-entity! env assoc ::mutation-response {:fulcro.client.impl.data-fetch/type :loading})
+    (db.h/swap-entity! env assoc ::mutation-response {::status :loading})
     nil))
 
 (mutations/defmutation finish-pmutation
@@ -96,11 +108,12 @@
   (action [env]
     (let [{:keys [state ref reconciler]} env
           error-marker (select-keys input #{::error-marker})
-          {::keys [mutation-response mutation-response-swap] :as props} (get-in @state ref)]
-      #?(:cljs (js/console.log props))
-      (if (mutation-error? @state (set/rename-keys props {::mutation-response-swap ::mutation-response}))
+          {::keys [mutation-response mutation-response-swap] :as props} (get-in @state ref)
+          had-error?   (contains? mutation-response-swap ::mutation-errors)
+          new-props    (set/rename-keys props {::mutation-response-swap ::mutation-response})]
+      (if had-error?
         (do
-          (db.h/swap-entity! env assoc ::mutation-response (merge mutation-response mutation-response-swap error-marker))
+          (db.h/swap-entity! env assoc ::mutation-response (merge mutation-response-swap error-marker {::status :api-error}))
           (call-mutation-action :error-action env mutation input))
         (do
           (when-let [component (get-response-component mutation-response)]
@@ -127,6 +140,7 @@
   (fp/ptransact! this `[(start-pmutation {})
                         ~(list mutation params)
                         (fulcro.client.data-fetch/fallback {:action mutation-network-error
+                                                            :input  ~params
                                                             ::ref   ~(fp/get-ident this)})
                         (finish-pmutation ~{:mutation mutation
                                             :input    params})]))

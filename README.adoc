@@ -66,7 +66,7 @@ and these beefed-up mutations can be run normally (in which case the ok/error ac
 meant to be run with:
 
 ```
-(pm/ptransact! this `do-something {:params 2})
+(pm/ptransact! this `do-something {:params 2 ::pm/error-marker :Bummer })
 ```
 
 The status is automatically merged with the component that is transacted against (via it's ident), and progress is
@@ -81,32 +81,34 @@ OK:: The key will not be there.
 In progress:: your component's state will include:
 
 ```
-:fulcro.incubator.pessimistic-mutations/mutation-response { :fulcro.client.impl.data-fetch/type :loading }
+::pm/mutation-response {::pm/status :loading }
 ```
+
+The status field will always be present as long as the mutation response is present. The mutation response is removed
+once a successful interaction is complete.
 
 API Failure:: (The mutation on the remote returned a map containing the key ::i.pm/mutation-errors):
 
 ```
-:fulcro.incubator.pessimistic-mutations/mutation-response {
-  :fulcro.incubator.pessimistic-mutations/error-marker :Bummer
-  :fulcro.incubator.pessimistic-mutations/mutation-errors :error-33}
+::pm/mutation-response {
+  ...                              ; All of the things your mutation returned will be merged into this map
+  ::pm/status :api-error           ; YOUR API's contained the key ::pm/mutation-errors
+  ::pm/error-marker :Bummer        ; This is the marker set when you originally called pmutate!
+  ::pm/mutation-errors :error-33}  ; this came from your server mutation
 ```
 
 where the error marker is a user-definable bit of data that you set up when you start the tx, and mutations-errors is
-what the API call placed in the response of the mutation.
+part of what the API call on the server returned.
 
-Hard Failure:: The server threw and exception or the network is down.
+Hard Failure:: The server threw an exception or the network is down.
 
 ```
-:fulcro.incubator.pessimistic-mutations/mutation-response {
-  :error {:fulcro.client.primitives/error #error {:message "You screwed up!!!", :data {}}}
-  :fulcro.client.primitives/error "Network error"
-  :fulcro.client.primitives/ref   [:demo/id 1]
-  :fulcro.incubator.pessimistic-mutations/mutation-errors :network-error}}
+::pm/mutation-response {
+  ::pm/status :hard-error                        ; network problem or exception thrown on server
+  ::pm/error-marker :Bummer                      ; your custom marker, if set
+  ::pm/low-level-error #error {:message "!!!"}   ; error detail (if available)
+  :fulcro.client.primitives/ref [:demo/id 1]}    ;ident of transacting component
 ```
-
-The main one to look for is the last one, which will not change.  The other keys are still under refinement, but currently
-the actual network error from the server (when an `ex-info` is thrown) is in the nested `:error` map.
 
 == UI
 
