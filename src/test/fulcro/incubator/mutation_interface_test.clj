@@ -16,8 +16,17 @@
   'a.b/d
   map?)
 
+(mi/declare-mutation bar 'x/bar)
+
 (deftest declaring-mutations
   (assertions
+    "Default to allowing any params"
+    (binding [mi/*checked-mutations* true]
+      (bar {:a 22})) => (list 'x/bar {:a 22})
+    (binding [mi/*checked-mutations* true]
+      (bar)) => (list 'x/bar {})
+    (binding [mi/*checked-mutations* true]
+      (bar {})) => (list 'x/bar {})
     "can be used to generate a mutation expression without quoting"
     (boo {:a "hello"}) => (list 'a.b/c {:a "hello"})
     "doc string is optional"

@@ -33,6 +33,9 @@
      Specs are only checked if used with dynamic var *check-mutations* set to true.
 
      In IntelliJ, use Resolve-as `def` to get proper IDE integration."
+     ([name target-symbol]
+      `(def ~name
+         (->Mutation ~target-symbol map?)))
      ([name target-symbol spec]
       `(def ~name
          (->Mutation ~target-symbol ~spec)))
