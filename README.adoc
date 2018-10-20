@@ -19,10 +19,22 @@ than having to write it from scratch, right?
 
 == DB Helpers
 
-At [`fulcro.incubator.db-helpers`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/db_helpers.cljc) you can find helper functions to deal with Fulcro local
-database map format. Those are helper functions for common operations like creating
-a new entity, recursively removing data and it's references. The documentation for the
-functions is in the code, give a scan there to check what's available.
+The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/db_helpers.cljc[`fulcro.incubator.db-helpers`]
+has helper functions to deal with Fulcro local database map format. Those are helper functions for common operations like creating
+a new entity, recursively removing data and it's references.
+
+The documentation for the functions is in the code, give a scan there to check what's available.
+
+NOTE: The latter half of this file has things that are migrating to pessimistic-mutations.  Use those instead.
+
+== Pessimistic Mutations
+
+Incubator includes an API for extended pessimistic mutations. These have features like automatic loading markers,
+error state merging, and initialization help.  The functions can be found in
+
+The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/fulcro/incubator/pessimistic_mutations.cljc[`fulcro.incubator.pessimistic-mutations`].
+
+and the workspaces have a demo (which is more revealing if you have Inspect installed in Chrome and watch the app state).
 
 == UI
 

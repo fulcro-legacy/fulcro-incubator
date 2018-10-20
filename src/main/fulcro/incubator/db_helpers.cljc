@@ -76,7 +76,7 @@
       (apply mutations/integrate-ident* state root-ident integrate-ident-named-parameters)
       state)))
 
-(def ^:deprecated merge-entity "DEPRECATED. Use merge-entity*" merge-entity*)
+(def merge-entity "DEPRECATED. Use merge-entity*" merge-entity*)
 
 (defn initialized
   "Mark `data` so that the value is not augmented via get-initial-state merging when using create-entity* and create-entity!"
@@ -87,17 +87,15 @@
   merge-component because it combines the `data` with the component's initial state.
 
   The named-parameters are passed to Fulcro integrate-ident* to add the ident of the new entity into other parts
-  of your app state.
+  of your app state. NOTE: The create-entity! function sets these to the invoking components ref + a field. This function
+  does *not*.
 
   See create-entity!"
   [state-map component-class data & named-parameters]
-  (let [named-parameters (->> (partition 2 named-parameters)
-                           (map (fn [[op path]] [op (conj ref path)]))
-                           (apply concat))
-        data'            (if (-> data meta ::initialized)
-                           data
-                           (fp/get-initial-state component-class data))
-        data''           (if (empty? data') data data')]
+  (let [data'  (if (-> data meta ::initialized)
+                 data
+                 (fp/get-initial-state component-class data))
+        data'' (if (empty? data') data data')]
     (apply merge-entity* state-map component-class data'' named-parameters)))
 
 (defn create-entity!
@@ -140,7 +138,10 @@
         (db.h/create-entity! env TodoItem todo :append ::todo-items))
   "
   [{:keys [state ref]} component-class data & named-parameters]
-  (apply swap! state create-entity* component-class data named-parameters))
+  (let [named-parameters (->> (partition 2 named-parameters)
+                           (map (fn [[op path]] [op (conj ref path)]))
+                           (apply concat))]
+    (apply swap! state create-entity* component-class data ref named-parameters)))
 
 (defn- dissoc-in
   "Remove the given leaf of the `path` from recursive data structure `m`"
@@ -169,7 +170,7 @@
       (dissoc-in state-map ident)
       idents)))
 
-(def ^:deprecated deep-remove-ref "DEPRECATED: Use deep-remote-entity*" deep-remove-entity*)
+(def deep-remove-ref "DEPRECATED: Use deep-remote-entity*" deep-remove-entity*)
 
 (defn remove-edge!
   "Given a mutation env and a field: Remove the graph edge designated by `field`, and recursively remove the data
@@ -216,7 +217,7 @@
        (merge-entity* state component-class (merge initial data))
        children))))
 
-(def ^:deprecated init-state "DEPRECATED: use init-loaded-state*" init-loaded-state*)
+(def init-state "DEPRECATED: use init-loaded-state*" init-loaded-state*)
 
 (defn vec-remove-index
   "Remove an item from a vector via index."
@@ -256,13 +257,15 @@
             :when (symbol? sym)]
       ((:action (mutations/mutate env sym params))))))
 
-;; ALPHA APIS: the pieces below these are still in design phase and are likely to have the API changed
+;; ================================================================================
+;; NOTE: THE FUNCTIONS BELOW ARE DEPRECATED. Migrate to the pessimistic-mutations namespace instead.
+;; ================================================================================
 
 ;; a safe way to save component in app state
 (defn- response-component [component] (with-meta {} {:component component}))
 (defn- get-response-component [response] (-> response :component meta :component))
 
-(defn transform-remote
+(defn- transform-remote
   "A helper function that you should not use. "
   [env ast]
   (let [ast (if (true? ast) (:ast env) ast)]
