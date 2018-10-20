@@ -30,7 +30,7 @@
     (js/console.log "OK Done"))
   (error-action [env]
     (js/console.log "Ran due to error"))
-  (remote [env] (i.pm/pessimistic-remote env)))
+  (remote [env] (i.pm/pessimistic-mutation env)))
 
 (defmutation do-something-bad [_]
   (action [env]
@@ -39,7 +39,7 @@
     (js/console.log "OK Done"))
   (error-action [env]
     (js/console.log "Ran due to error"))
-  (remote [env] (i.pm/pessimistic-remote env)))
+  (remote [env] (i.pm/pessimistic-mutation env)))
 
 
 (defmutation do-something-sorta-bad [_]
@@ -49,7 +49,7 @@
     (js/console.log "OK Done"))
   (error-action [env]
     (js/console.log "Ran due to error"))
-  (remote [env] (i.pm/pessimistic-remote env)))
+  (remote [env] (i.pm/pessimistic-mutation env)))
 
 (defsc DemoComponent [this props]
   {:query         [:demo/id :ui/checked?]

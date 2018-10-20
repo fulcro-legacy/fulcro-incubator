@@ -45,22 +45,34 @@ The basic idea is as follows:
 So, a sample pessimistic mutation looks like this:
 
 ```
-(i.pm/defpmutation do-something [_]
-  (pre-action [env]
-    (js/console.log "Ran before remote mutation"))
+(ns app
+  (:require
+    [fulcro.client.mutations :as m]
+    [fulcro.incubator.pessimistic-mutations :as pm]))
+
+(m/defmutation do-something [_]
   (action [env]
-    (js/console.log "MUTATION OK. Local Action happens AFTER remote interaction only if it is OK."))
+    (js/console.log "Optimistic update (if needed)"))
+  (ok-action [env]
+    (js/console.log "Runs only if mutation is OK"))
   (error-action [env]
-    (js/console.log "Ran due to error."))
-  (remote [_] true))
+    (js/console.log "Runs if mutation fails."))
+  (remote [env] (pm/pessimistic-mutation env)))
+```
+
+and these beefed-up mutations can be run normally (in which case the ok/error actions are no-ops), but they are
+meant to be run with:
+
+```
+(pm/ptransact! this `do-something {:params 2})
 ```
 
 The status is automatically merged with the component that is transacted against (via it's ident), and progress is
-merged with that component along the way so that you can write wrappers to handle the rendering of the different states.
+merged with that component along the way so that you can write UI wrappers to handle the rendering of the different states.
 
-The data merged into your component will be under the key `:fulcro.incubator.pessimistic-mutations/mutation-response`.
+The data merged into your component will be under the key `::pm/mutation-response`.
 
-It can have the following general shapes:
+It can have the following general shapes (work-in-progress):
 
 OK:: The key will not be there.
 

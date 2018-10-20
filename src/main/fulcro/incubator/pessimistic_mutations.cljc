@@ -15,7 +15,7 @@
 (defn- response-component [component] (with-meta {} {:component component}))
 (defn- get-response-component [response] (-> response :component meta :component))
 
-(defn pessimistic-remote
+(defn pessimistic-mutation
   "You must call this function in the remote of mutations that are used with `pmutate!`.
 
   (defmutation x [_]
