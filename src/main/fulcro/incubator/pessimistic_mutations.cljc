@@ -90,19 +90,20 @@
     ::keys [ref] :as p}]
   (action [env]
     (let [low-level-error (some-> error first second :fulcro.client.primitives/error)
-          {::keys [error-marker]} params]
+          {::keys [key]} params]
       (db.h/swap-entity! (assoc env :ref ref) assoc ::mutation-response-swap
         (cond-> (dissoc p ::ref :error :params)
           :always (assoc ::status :hard-error)
-          error-marker (assoc ::error-marker error-marker)
+          key (assoc ::key key)
           low-level-error (assoc ::low-level-error low-level-error))))
     nil))
 
 (mutations/defmutation start-pmutation
   "INTERNAL USE mutation."
-  [_]
-  (action [{:keys [component ref] :as env}]
-    (db.h/swap-entity! env assoc ::mutation-response {::status :loading})
+  [{::keys [key]}]
+  (action [env]
+    (db.h/swap-entity! env assoc ::mutation-response {::status :loading
+                                                      ::key    key})
     nil))
 
 (mutations/defmutation finish-pmutation
@@ -110,22 +111,22 @@
   [{:keys [mutation params]}]
   (action [env]
     (let [{:keys [state ref reconciler]} env
-          {::keys [error-marker target returning]} params
-          {::keys [mutation-response-swap] :as props} (get-in @state ref)
+          {::keys [key target returning]} params
+          {::keys [mutation-response-swap]} (get-in @state ref)
           {::keys [status]} mutation-response-swap
           hard-error? (= status :hard-error)
           api-error?  (contains? mutation-response-swap ::mutation-errors)
           had-error?  (or hard-error? api-error?)]
       (if had-error?
         (do
-          (db.h/swap-entity! env assoc ::mutation-response (merge {::status :api-error} mutation-response-swap {::error-marker error-marker}))
+          (db.h/swap-entity! env assoc ::mutation-response (merge {::status :api-error} mutation-response-swap {::key key}))
           (call-mutation-action :error-action env mutation params))
         (do
           ;; so the ok action can see it
           (db.h/swap-entity! env (fn [s]
                                    (-> s
                                      (dissoc ::mutation-response-swap)
-                                     (assoc ::mutation-response mutation-response-swap))))
+                                     (assoc ::mutation-response (merge mutation-response-swap {::key key})))))
           (when returning
             (fp/merge-component! reconciler returning mutation-response-swap))
           (when target
@@ -145,9 +146,9 @@
 
   The following special keys can be included in `params` to augment how it works:
 
-  - `::pm/error-marker any-value` -
-    This k/v pair will be in included in the ::mutation-response if is an error. This allows you to distinguish
-    errors among components that share an ident (e.g. one component causes a mutation error, but all with that ident update).
+  - `::pm/key any-value` -
+    This k/v pair will be in included in the ::mutation-response at all times. This allows you to distinguish
+    among components that share an ident (e.g. one component causes a mutation error, but all with that ident update).
   - `::pm/target - The target for the mutation response (identical to `data-fetch/load`'s target parameter, including support
   for multiple).
   - `::pm/returning` - The component class of the return type, for normalization. If not specified then target will
