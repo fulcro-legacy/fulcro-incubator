@@ -9,11 +9,25 @@
     [fulcro.client.dom :as dom]
     [nubank.workspaces.model :as wsm]
     [nubank.workspaces.card-types.fulcro :as ct.fulcro]
-    [nubank.workspaces.lib.fulcro-portal :as f.portal]))
+    [nubank.workspaces.lib.fulcro-portal :as f.portal]
+    [fulcro.client.mutations :as m]
+    [fulcro.client.data-fetch :as df]
+    [fulcro.client.primitives :as prim]))
+
+(defsc TodoItem [_ _]
+  {:ident [:item/id :item/id]
+   :query [:item/id :item/name]})
+
+(defsc TodoList [_ _]
+  {:ident [:list/id :list/id]
+   :query [:list/id :list/name {:list/items (fp/get-query TodoItem)}]})
 
 (server/defmutation do-something-good [_]
   (action [env]
-    (js/console.log "server do something good")))
+    (js/console.log "server do something good")
+    {:list/id    1
+     :list/name  "Honey Do"
+     :list/items [{:item/id 2 :item/name "Buy Milk"}]}))
 
 (server/defmutation do-something-bad [_]
   (action [env]
@@ -26,18 +40,20 @@
 (defmutation do-something-good [_]
   (action [env]
     (js/console.log "Optimistic"))
-  (ok-action [env]
-    (js/console.log "OK Done"))
+  (ok-action [{:keys [state ref]}]
+    (js/console.log "OK Done: visible mutation response: " (get-in @state ref)))
   (error-action [env]
     (js/console.log "Ran due to error"))
-  (remote [env] (pm/pessimistic-mutation env)))
+  (remote [env]
+    (pm/pessimistic-mutation env)))
 
 (defmutation do-something-bad [_]
   (action [env]
     (js/console.log "Optimistic"))
   (ok-action [env]
     (js/console.log "OK Done"))
-  (error-action [env]
+  (error-action [{:keys [state ref]}]
+    (js/console.log "visible mutation response: " (get-in @state ref))
     (js/console.log "Ran due to error"))
   (remote [env] (pm/pessimistic-mutation env)))
 
@@ -47,7 +63,8 @@
     (js/console.log "Optimistic"))
   (ok-action [env]
     (js/console.log "OK Done"))
-  (error-action [env]
+  (error-action [{:keys [state ref]}]
+    (js/console.log "visible mutation response: " (get-in @state ref))
     (js/console.log "Ran due to error"))
   (remote [env] (pm/pessimistic-mutation env)))
 
@@ -58,7 +75,10 @@
   (dom/div
     (dom/button {:onClick #(pm/pmutate! this `do-something-bad {::pm/error-marker :Sad-face})} "Mutation Crash/Hard network error")
     (dom/button {:onClick #(pm/pmutate! this `do-something-sorta-bad {::pm/error-marker :Bummer})} "API Level Mutation Error")
-    (dom/button {:onClick #(pm/pmutate! this `do-something-good {})} "Good Mutation")
+    (dom/button {:onClick #(pm/pmutate! this `do-something-good {::pm/returning TodoList
+                                                                 ::pm/target    (df/multiple-targets
+                                                                                  [:main-list]
+                                                                                  (df/append-to [:all-lists]))})} "Good Mutation")
     "Hi"))
 
 (ws/defcard pmutation-card
@@ -66,4 +86,6 @@
   (ct.fulcro/fulcro-card
     {::f.portal/root       DemoComponent
      ::f.portal/wrap-root? true
-     ::f.portal/app        {:networking (server/new-server-emulator (server/fulcro-parser) 300)}}))
+     ::f.portal/app        {:started-callback (fn [{:keys [reconciler]}]
+                                               (swap! (prim/app-state reconciler) assoc :all-lists []))
+                            :networking      (server/new-server-emulator (server/fulcro-parser) 300)}}))
