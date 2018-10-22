@@ -5,6 +5,7 @@
   #?(:cljs (:require-macros fulcro.incubator.pessimistic-mutations))
   (:require
     [fulcro.incubator.db-helpers :as db.h]
+    [fulcro.incubator.mutation-interface :as mi]
     [fulcro.client.mutations :as mutations]
     [fulcro.client.primitives :as fp]
     [fulcro.client.data-fetch :as fetch]
@@ -141,8 +142,8 @@
   "Run a pmutation defined by `defpmutation`.
 
   this - The component whose ident will be used for status reporting on the progress of the mutation.
-  mutation - The symbol of the mutation you want to run.
-  params - The parameter map for the mutation
+  mutation - The symbol of the mutation you want to run OR the mutation declaration name (using mutation-interface).
+  params - The parameter map for the mutation.
 
   The following special keys can be included in `params` to augment how it works:
 
@@ -155,9 +156,12 @@
   not be honored and no merge of the response will remain (only detect loading/errors of mutation).
   "
   [this mutation params]
-  (fp/ptransact! this `[(start-pmutation ~params)
-                        ~(list mutation params)
-                        (fulcro.client.data-fetch/fallback {:action mutation-network-error
-                                                            :params ~params
-                                                            ::ref   ~(fp/get-ident this)})
-                        (finish-pmutation ~{:mutation mutation :params params})]))
+  (let [mutation (if (mi/mutation-declaration? mutation)
+                   (first (mutation params))
+                   mutation)]
+    (fp/ptransact! this `[(start-pmutation ~params)
+                          ~(list mutation params)
+                          (fulcro.client.data-fetch/fallback {:action mutation-network-error
+                                                              :params ~params
+                                                              ::ref   ~(fp/get-ident this)})
+                          (finish-pmutation ~{:mutation mutation :params params})])))

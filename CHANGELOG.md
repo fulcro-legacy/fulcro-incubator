@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.6
+-----
+- Added support for mutation interfaces to be used with `pmutate!`
+
 0.0.5
 -----
 - Renamed `::pm/error-marker` to `::pm/key`.

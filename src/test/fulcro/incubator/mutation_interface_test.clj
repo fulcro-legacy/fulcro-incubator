@@ -33,4 +33,8 @@
     "ignores specs without dynamic binding of *checked-mutations*"
     (boo {:a 22 :b "hello"}) => (list 'a.b/c {:a 22 :b "hello"})
     "enforces specs with dynamic binding"
-    (mi/! (boo {:a 22 :b "hello"})) =throws=> {:regex #"Mutation failed spec"}))
+    (mi/! (boo {:a 22 :b "hello"})) =throws=> {:regex #"Mutation failed spec"}
+    "can be distinguished as the interface"
+    (mi/mutation-declaration? foo) => true
+    (mi/mutation-declaration? (foo)) => false
+    (mi/mutation-declaration? 'a.b/c) => false))
