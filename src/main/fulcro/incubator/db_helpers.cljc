@@ -396,7 +396,14 @@
 
   this - The component whose ident will be used for status reporting on the progress of the mutation.
   mutation - The symbol of the mutation you want to run.
-  params - The parameter map for the mutation"
+  params - The parameter map for the mutation.
+
+  The `params` map can contain the additional special keys which are used to augment the functionality:
+
+  `::pm/error-marker` - An opaque value that will be placed in the mutation response if there is an error. You can
+  use this to distinguish the error when components in the UI share idents.
+
+  "
   [this mutation params]
   (let [ok-mutation    (symbol (str mutation "-ok"))
         error-mutation (symbol (str mutation "-error"))]

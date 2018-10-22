@@ -8,6 +8,8 @@
     [fulcro.client.mutations :as mutations]
     [fulcro.client.primitives :as fp]
     [fulcro.client.data-fetch :as fetch]
+    [fulcro.client.impl.data-targeting :as data-targeting]
+    [fulcro.logging :as log]
     [clojure.set :as set]
     [clojure.spec.alpha :as s]))
 
@@ -22,21 +24,23 @@
 
   (defmutation x [_]
     (remote [env] (pessimistic-remote env)))
+
+  NOTES: You *must not* compose this with Fulcro's `returning` or `with-target`.
+  You should instead use the special keys of `pmutate`'s params.
   "
-  [{:keys [ast] :as env}]
-  (do
-    (when-let [component (some-> ast :query meta :component)]
-      (db.h/swap-entity! env assoc-in [::mutation-response :component] (response-component component)))
-    (-> ast
-      (cond-> (:query ast) (update :query vary-meta dissoc :component))
-      (mutations/with-target (conj (:ref env) ::mutation-response-swap)))))
+  [{:keys [ast ref] :as env}]
+  (when (:query ast)
+    (log/error "You should not use mutation joins (returning) with `pmutate!`. Use the params of `pmutate!` instead."))
+  (-> ast
+    (cond-> (:query ast) (update :query vary-meta dissoc :component))
+    (mutations/with-target (conj ref ::mutation-response-swap))))
 
 (defn mutation-response
-  "Retrieves the mutation response from `this` component.  Can also be used against the state-map with an ident."
-  ([this]
-   (if (fp/component? this)
-     (mutation-response (-> this fp/get-reconciler fp/app-state deref) (fp/props this))
-     (-> this ::mutation-response)))
+  "Retrieves the mutation response from `this-or-props` (a component or props).  Can also be used against the state-map with an ident."
+  ([this-or-props]
+   (if (fp/component? this-or-props)
+     (mutation-response (-> this-or-props fp/get-reconciler fp/app-state deref) (fp/props this-or-props))
+     (-> this-or-props ::mutation-response)))
   ([state props]
    (let [response (-> props ::mutation-response)]
      (if (fulcro.util/ident? response) (get-in state response) response))))
@@ -46,8 +50,7 @@
    (let [response (mutation-response state props)]
      (-> response ::status)))
   ([this]
-   (let [props (cond-> this (fp/component? this) fp/props)]
-     (-> props ::mutation-response ::status))))
+   (-> (mutation-response this) ::status)))
 
 (defn mutation-loading?
   "Checks this props of `this` component to see if a mutation is in progress."
@@ -72,7 +75,7 @@
 
 (defn call-mutation-action
   "Call a Fulcro client mutation action (defined on the multimethod fulcro.client.mutations/mutate). This
-  runs the `action` section of the mutation and returns its value."
+  runs the `action` (or `custom-action`) section of the mutation and returns its value."
   ([custom-action env k p]
    (when-let [h (-> (get-mutation env k p) (get (keyword (name custom-action))))]
      (h)))
@@ -83,13 +86,13 @@
 
 (mutations/defmutation mutation-network-error
   "INTERNAL USE mutation."
-  [{:keys  [error input]
+  [{:keys  [error params]
     ::keys [ref] :as p}]
   (action [env]
     (let [low-level-error (some-> error first second :fulcro.client.primitives/error)
-          {::keys [error-marker]} input]
-      (db.h/swap-entity! (assoc env :ref ref) assoc ::mutation-response
-        (cond-> (dissoc p ::ref :error :input)
+          {::keys [error-marker]} params]
+      (db.h/swap-entity! (assoc env :ref ref) assoc ::mutation-response-swap
+        (cond-> (dissoc p ::ref :error :params)
           :always (assoc ::status :hard-error)
           error-marker (assoc ::error-marker error-marker)
           low-level-error (assoc ::low-level-error low-level-error))))
@@ -98,30 +101,39 @@
 (mutations/defmutation start-pmutation
   "INTERNAL USE mutation."
   [_]
-  (action [env]
+  (action [{:keys [component ref] :as env}]
     (db.h/swap-entity! env assoc ::mutation-response {::status :loading})
     nil))
 
 (mutations/defmutation finish-pmutation
   "INTERNAL USE mutation."
-  [{:keys [mutation input]}]
+  [{:keys [mutation params]}]
   (action [env]
     (let [{:keys [state ref reconciler]} env
-          error-marker (select-keys input #{::error-marker})
-          {::keys [mutation-response mutation-response-swap] :as props} (get-in @state ref)
-          had-error?   (contains? mutation-response-swap ::mutation-errors)
-          new-props    (set/rename-keys props {::mutation-response-swap ::mutation-response})]
+          {::keys [error-marker target returning]} params
+          {::keys [mutation-response-swap] :as props} (get-in @state ref)
+          {::keys [status]} mutation-response-swap
+          hard-error? (= status :hard-error)
+          api-error?  (contains? mutation-response-swap ::mutation-errors)
+          had-error?  (or hard-error? api-error?)]
       (if had-error?
         (do
-          (db.h/swap-entity! env assoc ::mutation-response (merge mutation-response-swap error-marker {::status :api-error}))
-          (call-mutation-action :error-action env mutation input))
+          (db.h/swap-entity! env assoc ::mutation-response (merge {::status :api-error} mutation-response-swap {::error-marker error-marker}))
+          (call-mutation-action :error-action env mutation params))
         (do
-          (when-let [component (get-response-component mutation-response)]
-            (fp/merge-component! reconciler component mutation-response-swap))
-
-          (when (mutation-loading? props) (db.h/swap-entity! env dissoc ::mutation-response))
-
-          (call-mutation-action :ok-action env mutation input)))
+          ;; so the ok action can see it
+          (db.h/swap-entity! env (fn [s]
+                                   (-> s
+                                     (dissoc ::mutation-response-swap)
+                                     (assoc ::mutation-response mutation-response-swap))))
+          (when returning
+            (fp/merge-component! reconciler returning mutation-response-swap))
+          (when target
+            (if-let [return-value-ident (and target (fp/get-ident returning mutation-response-swap))]
+              (swap! (:state env) data-targeting/process-target return-value-ident target false)
+              (swap! (:state env) data-targeting/process-target (conj ref ::mutation-response-swap) target false)))
+          (call-mutation-action :ok-action env mutation params)
+          (db.h/swap-entity! env dissoc ::mutation-response)))
       (db.h/swap-entity! env dissoc ::mutation-response-swap))))
 
 (defn pmutate!
@@ -133,14 +145,18 @@
 
   The following special keys can be included in `params` to augment how it works:
 
-  - `:fulcro.incubator.pessimistic-mutations/error-marker any-value` -
+  - `::pm/error-marker any-value` -
     This k/v pair will be in included in the ::mutation-response if is an error. This allows you to distinguish
-    errors among components that share an ident (e.g. one component causes a mutation error, but all with that ident update)."
+    errors among components that share an ident (e.g. one component causes a mutation error, but all with that ident update).
+  - `::pm/target - The target for the mutation response (identical to `data-fetch/load`'s target parameter, including support
+  for multiple).
+  - `::pm/returning` - The component class of the return type, for normalization. If not specified then target will
+  not be honored and no merge of the response will remain (only detect loading/errors of mutation).
+  "
   [this mutation params]
-  (fp/ptransact! this `[(start-pmutation {})
+  (fp/ptransact! this `[(start-pmutation ~params)
                         ~(list mutation params)
                         (fulcro.client.data-fetch/fallback {:action mutation-network-error
-                                                            :input  ~params
+                                                            :params ~params
                                                             ::ref   ~(fp/get-ident this)})
-                        (finish-pmutation ~{:mutation mutation
-                                            :input    params})]))
+                        (finish-pmutation ~{:mutation mutation :params params})]))

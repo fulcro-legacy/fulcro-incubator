@@ -29,7 +29,7 @@ NOTE: The latter half of this file has things that are migrating to pessimistic-
 
 == Pessimistic Mutations
 
-NOTE: Requires Fulcro 2.6.9-SNAPSHOT or greater.
+NOTE: Requires Fulcro 2.6.9 or greater.
 
 Incubator includes an API for extended pessimistic mutations. These have features like automatic loading markers,
 error state merging, and initialization help.  The functions can be found in
@@ -41,8 +41,10 @@ and the workspaces have a demo (which is more revealing if you have Inspect inst
 The basic idea is as follows:
 
 . A mutation `action` can do an optimistic change.
-. A mutation `ok-action` runs *after* the remote completes.
-. Errors call the `error-action` part of the mutation.
+. A mutation `ok-action` runs *after* the remote completes, and will see the value returned by the mutation under ::pm/mutation-response in
+the entity against which the pmutate! was run. The mutation response will be cleared afterwards.
+. Errors call the `error-action` part of the mutation. The error will be visible in app state during this handler, and
+will remain under ::pm/mutation-response until the mutation is run again or it is manually cleared.
 
 So, a sample pessimistic mutation looks like this:
 
@@ -62,21 +64,17 @@ So, a sample pessimistic mutation looks like this:
   (remote [env] (pm/pessimistic-mutation env)))
 ```
 
-and these beefed-up mutations can be run normally (in which case the ok/error actions are no-ops), but they are
+and while these beefed-up mutations *could be* run normally (in which case the ok/error actions are no-ops), they are
 meant to be run with:
 
 ```
 (pm/ptransact! this `do-something {:params 2 ::pm/error-marker :Bummer })
 ```
 
-The status is automatically merged with the component that is transacted against (via it's ident), and progress is
-merged with that component along the way so that you can write UI wrappers to handle the rendering of the different states.
+The status is automatically merged into the component that is transacted against (via it's ident) at the `::pm/mutation-response``
+key, and progress is merged with that component along the way so that you can write UI wrappers to handle the rendering of the different states.
 
-The data merged into your component will be under the key `::pm/mutation-response`.
-
-It can have the following general shapes (work-in-progress):
-
-OK:: The key will not be there.
+It can have the following values:
 
 In progress:: your component's state will include:
 
@@ -84,10 +82,14 @@ In progress:: your component's state will include:
 ::pm/mutation-response {::pm/status :loading }
 ```
 
-The status field will always be present as long as the mutation response is present. The mutation response is removed
-once a successful interaction is complete.
+The status field will always be present as long as the mutation response is present.
 
-API Failure:: (The mutation on the remote returned a map containing the key ::i.pm/mutation-errors):
+OK:: The `::pm/mutation-response` key will be there (and contain the value returned by the mutation)
+*during* the `ok-action`, but will be cleared once the mutation is complete.
+
+API Failure:: (The mutation on the remote returned a map containing the key ::pm/mutation-errors):
+
+The mutation response will look like this:
 
 ```
 ::pm/mutation-response {
@@ -98,7 +100,8 @@ API Failure:: (The mutation on the remote returned a map containing the key ::i.
 ```
 
 where the error marker is a user-definable bit of data that you set up when you start the tx, and mutations-errors is
-part of what the API call on the server returned.
+part of what the API call on the server returned.  This will be visible to the `error-action`, and will *not* be removed
+from state unless you clear it or run another mutation against that component.
 
 Hard Failure:: The server threw an exception or the network is down.
 
@@ -109,6 +112,9 @@ Hard Failure:: The server threw an exception or the network is down.
   ::pm/low-level-error #error {:message "!!!"}   ; error detail (if available)
   :fulcro.client.primitives/ref [:demo/id 1]}    ;ident of transacting component
 ```
+
+and will be visible in `error-action` and will not be removed until you clear it (or run another mutation against
+that component).
 
 == UI
 
