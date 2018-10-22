@@ -1,5 +1,11 @@
 # Change Log
 
+0.0.4
+-----
+- Fixed hard errors in pmutate to not call ok handler
+- Added target/returning support to `pmutate!`
+- Improved visibility rules rules for mutation response, and documented it.
+
 0.0.3
 -----
 - Refined mutation interface declaration
