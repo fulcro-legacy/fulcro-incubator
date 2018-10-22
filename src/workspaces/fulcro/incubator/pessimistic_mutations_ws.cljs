@@ -12,7 +12,8 @@
     [nubank.workspaces.lib.fulcro-portal :as f.portal]
     [fulcro.client.mutations :as m]
     [fulcro.client.data-fetch :as df]
-    [fulcro.client.primitives :as prim]))
+    [fulcro.client.primitives :as prim]
+    [fulcro.incubator.mutation-interface :as mi]))
 
 (defsc TodoItem [_ _]
   {:ident [:item/id :item/id]
@@ -47,6 +48,8 @@
   (remote [env]
     (pm/pessimistic-mutation env)))
 
+(mi/declare-mutation do-something-good-interface `do-something-good)
+
 (defmutation do-something-bad [_]
   (action [env]
     (js/console.log "Optimistic"))
@@ -75,11 +78,11 @@
   (dom/div
     (dom/button {:onClick #(pm/pmutate! this `do-something-bad {::pm/key :Sad-face})} "Mutation Crash/Hard network error")
     (dom/button {:onClick #(pm/pmutate! this `do-something-sorta-bad {::pm/key :Bummer})} "API Level Mutation Error")
-    (dom/button {:onClick #(pm/pmutate! this `do-something-good {::pm/returning TodoList
-                                                                 ::pm/key       :todo-list-key
-                                                                 ::pm/target    (df/multiple-targets
-                                                                                  [:main-list]
-                                                                                  (df/append-to [:all-lists]))})} "Good Mutation")
+    (dom/button {:onClick #(pm/pmutate! this do-something-good-interface {::pm/returning TodoList
+                                                                          ::pm/key       :todo-list-key
+                                                                          ::pm/target    (df/multiple-targets
+                                                                                           [:main-list]
+                                                                                           (df/append-to [:all-lists]))})} "Good Mutation")
     "Hi"))
 
 (ws/defcard pmutation-card

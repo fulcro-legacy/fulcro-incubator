@@ -139,6 +139,24 @@ For example:
                                            (df/append-to [:all-lists]))})
 ```
 
+=== Leveraging Mutation Interfaces
+
+The `mutation-interface` namespace in this same library allows you to get rid of the
+need to quote your mutation names.  The `pmutate!` call automatically detects these so that they
+can be used:
+
+```
+(defmutation the-real-mutation [params] ...)
+
+(mi/declare-mutation my-mutation `the-real-mutation)
+
+...
+
+(pm/pmutate! this `the-real-mutation {})
+;; OR
+(pm/pmutate! this my-mutation {})
+```
+
 === Dealing with Ident Overlap
 
 UI components can share an ident (e.g. a `PersonListItem` and a `PersonForm`).  If both are on the screen at the

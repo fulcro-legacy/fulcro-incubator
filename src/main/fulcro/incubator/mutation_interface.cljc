@@ -54,3 +54,5 @@
      [tx]
      `(binding [*checked-mutations* true]
         ~tx)))
+
+(defn mutation-declaration? [expr] (= Mutation (type expr)))
