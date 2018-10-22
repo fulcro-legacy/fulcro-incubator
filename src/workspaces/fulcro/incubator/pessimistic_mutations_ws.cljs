@@ -73,9 +73,10 @@
    :ident         [:demo/id :demo/id]
    :initial-state {:demo/id 1 :ui/checked? true}}
   (dom/div
-    (dom/button {:onClick #(pm/pmutate! this `do-something-bad {::pm/error-marker :Sad-face})} "Mutation Crash/Hard network error")
-    (dom/button {:onClick #(pm/pmutate! this `do-something-sorta-bad {::pm/error-marker :Bummer})} "API Level Mutation Error")
+    (dom/button {:onClick #(pm/pmutate! this `do-something-bad {::pm/key :Sad-face})} "Mutation Crash/Hard network error")
+    (dom/button {:onClick #(pm/pmutate! this `do-something-sorta-bad {::pm/key :Bummer})} "API Level Mutation Error")
     (dom/button {:onClick #(pm/pmutate! this `do-something-good {::pm/returning TodoList
+                                                                 ::pm/key       :todo-list-key
                                                                  ::pm/target    (df/multiple-targets
                                                                                   [:main-list]
                                                                                   (df/append-to [:all-lists]))})} "Good Mutation")
@@ -87,5 +88,5 @@
     {::f.portal/root       DemoComponent
      ::f.portal/wrap-root? true
      ::f.portal/app        {:started-callback (fn [{:keys [reconciler]}]
-                                               (swap! (prim/app-state reconciler) assoc :all-lists []))
-                            :networking      (server/new-server-emulator (server/fulcro-parser) 300)}}))
+                                                (swap! (prim/app-state reconciler) assoc :all-lists []))
+                            :networking       (server/new-server-emulator (server/fulcro-parser) 300)}}))

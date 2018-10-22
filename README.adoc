@@ -38,6 +38,8 @@ The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro
 
 and the workspaces have a demo (which is more revealing if you have Inspect installed in Chrome and watch the app state).
 
+=== Basics
+
 The basic idea is as follows:
 
 . A mutation `action` can do an optimistic change.
@@ -68,8 +70,10 @@ and while these beefed-up mutations *could be* run normally (in which case the o
 meant to be run with:
 
 ```
-(pm/ptransact! this `do-something {:params 2 ::pm/error-marker :Bummer })
+(pm/ptransact! this `do-something {:params 2 ::pm/key :Bummer })
 ```
+
+=== Responses and Status
 
 The status is automatically merged into the component that is transacted against (via it's ident) at the `::pm/mutation-response``
 key, and progress is merged with that component along the way so that you can write UI wrappers to handle the rendering of the different states.
@@ -95,7 +99,7 @@ The mutation response will look like this:
 ::pm/mutation-response {
   ...                              ; All of the things your mutation returned will be merged into this map
   ::pm/status :api-error           ; YOUR API's contained the key ::pm/mutation-errors
-  ::pm/error-marker :Bummer        ; This is the marker set when you originally called pmutate!
+  ::pm/key :Bummer                 ; This is the key set when you originally called pmutate!
   ::pm/mutation-errors :error-33}  ; this came from your server mutation
 ```
 
@@ -108,13 +112,70 @@ Hard Failure:: The server threw an exception or the network is down.
 ```
 ::pm/mutation-response {
   ::pm/status :hard-error                        ; network problem or exception thrown on server
-  ::pm/error-marker :Bummer                      ; your custom marker, if set
+  ::pm/key :Bummer                               ; your custom key, if set
   ::pm/low-level-error #error {:message "!!!"}   ; error detail (if available)
   :fulcro.client.primitives/ref [:demo/id 1]}    ;ident of transacting component
 ```
 
 and will be visible in `error-action` and will not be removed until you clear it (or run another mutation against
 that component).
+
+=== Targeting and Merging the Mutation Response
+
+Do not use the normal Fulcro `with-target` and `returning` with `pmutate!`, since you do not want those things to
+happen on errors.  The `pmutate!` parameters (which are also sent to your handlers and the remote) can include a
+special keys for doing targeting and merging:
+
+- `::pm/returning Class` - If you include this in the params, then on an OK mutation response the response will be
+merged with `prim/merge-component` using the specified `Class`.
+- `::pm/target targets` - Exactly like Fulcro's data fetch load targets (you can use `df/multiple`, etc.)
+
+For example:
+
+```
+(pm/pmutate! this `do-thing {::pm/returning TodoList
+                             ::pm/target (df/mutliple-targets
+                                           [:main-list]
+                                           (df/append-to [:all-lists]))})
+```
+
+=== Dealing with Ident Overlap
+
+UI components can share an ident (e.g. a `PersonListItem` and a `PersonForm`).  If both are on the screen at the
+same time and you use `pmutate!` then *both* will see the mutation resposne in their state.  Without a way
+to distinguish the intended recipient of the response it would be hard to write components that behaved correctly
+together on the screen.
+
+To handle this scenario you can pass an additional `::pm/key` parameter to `pmutate!` which will be included in the
+`::pm/mutation-response` at all phases that you can use in your UI to distinguish
+which component should "pay attention to" the response.  Of course all of the parameters are visible inside of the mutation itself,
+but only the *merged* mutation response value is visible in the `props` of the components for making rendering decisions
+during the active phases. (they still have to include `::pm/mutation-response` in their query).
+
+The special parameter `::pm/key` can be any (opaque and serializable) value.
+
+Thus, two alternate renderings of the same state can deal with the idea of "localized mutations" (even though they will both
+technically see the mutation response if they query for it):
+
+```
+(defsc Comp [this {::pm/keys [mutation-response]}]
+  {:query [::pm/mutation-response ...]
+   :ident (fn [] [:table :a]}
+  (let [{::pm/keys [key]} mutation-response]
+    (dom/div
+      (dom/button {:onClick #(pm/pmutate! this `do-thing {::pm/key :primary
+                                                          :do-thing-param 2})})
+      (when (= :primary key) ...))))
+
+(defsc CompAlt [this {::pm/keys [mutation-response]}]
+  {:query [::pm/mutation-response ...]
+   :ident (fn [] [:table :a]}
+  (let [{::pm/keys [key]} mutation-response]
+    (dom/div
+      (dom/button {:onClick #(pm/pmutate! this `do-thing {::pm/key :alt
+                                                          :do-thing-param 1})})
+      (when (= :alt key) ...))))
+```
 
 == UI
 

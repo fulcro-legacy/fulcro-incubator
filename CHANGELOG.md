@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.5
+-----
+- Renamed `::pm/error-marker` to `::pm/key`.
+- Made `::pm/key` visible in loading and errors.
+
 0.0.4
 -----
 - Fixed hard errors in pmutate to not call ok handler
