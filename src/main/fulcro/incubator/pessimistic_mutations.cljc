@@ -33,6 +33,7 @@
   (when (:query ast)
     (log/error "You should not use mutation joins (returning) with `pmutate!`. Use the params of `pmutate!` instead."))
   (-> ast
+    (update :params dissoc ::returning ::target)
     (cond-> (:query ast) (update :query vary-meta dissoc :component))
     (mutations/with-target (conj ref ::mutation-response-swap))))
 
