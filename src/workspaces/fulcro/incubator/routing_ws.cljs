@@ -30,14 +30,14 @@
    :query         [::module-key]
    :initial-state {::module-key ::module-1}}
   (when-let [factory (get @module-registry ::module-1)]
-    (factory props)))
+    (factory (::screen props))))
 
 (defsc Module2Placeholder [_ props]
   {:ident         (fn [] (module-ident props))
    :query         [::module-key]
    :initial-state {::module-key ::module-2}}
   (when-let [factory (get @module-registry ::module-2)]
-    (factory props)))
+    (factory (::screen props))))
 
 (defsc Preloaded [this props]
   {:query         [::module-key]
