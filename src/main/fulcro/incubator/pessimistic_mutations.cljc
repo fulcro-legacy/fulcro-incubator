@@ -32,7 +32,7 @@
   [{:keys [ast ref] :as env}]
   (when (:query ast)
     (log/error "You should not use mutation joins (returning) with `pmutate!`. Use the params of `pmutate!` instead."))
-  (-> ast
+  (some-> ast
     (update :params dissoc ::returning ::target)
     (cond-> (:query ast) (update :query vary-meta dissoc :component))
     (mutations/with-target (conj ref ::mutation-response-swap))))
@@ -72,8 +72,11 @@
   {:action (fn [env] ...)
    :remote ...}"
   [env k p]
-  (when-let [m (get (methods mutations/mutate) k)]
-    (m env k p)))
+  (try
+    (when-let [m (get (methods mutations/mutate) k)]
+     (m env k p))
+    (catch #?(:clj Exception :cljs :default) e
+      (log/error "Unable to read mutation. Some features of pmutate! may fail.  You should check your remote(s) to make sure they tolerate an empty env."))))
 
 (defn call-mutation-action
   "Call a Fulcro client mutation action (defined on the multimethod fulcro.client.mutations/mutate). This
@@ -102,10 +105,14 @@
 
 (mutations/defmutation start-pmutation
   "INTERNAL USE mutation."
-  [{::keys [key]}]
-  (action [env]
-    (db.h/swap-entity! env assoc ::mutation-response {::status :loading
-                                                      ::key    key})
+  [{::keys [key target]}]
+  (action [{:keys [state] :as env}]
+    (let [loading-marker {::status :loading
+                          ::key    key}]
+      (db.h/swap-entity! env assoc ::mutation-response {::status :loading
+                                                        ::key    key})
+      (when (and target (map? (get-in @state target)))
+        (swap! state assoc-in (conj target ::mutation-response) loading-marker)))
     nil))
 
 (mutations/defmutation finish-pmutation
@@ -137,7 +144,9 @@
                 (when (nil? (second return-value-ident))
                   (log/warn "Targeted value of type " returning " did not generate a valid ident from the server return value: " mutation-response-swap))
                 (swap! (:state env) data-targeting/process-target return-value-ident target false))
-              (swap! (:state env) data-targeting/process-target (conj ref ::mutation-response-swap) target false)))
+              (swap! (:state env) data-targeting/process-target (conj ref ::mutation-response-swap) target false))
+            (when (get-in @state (conj target ::mutation-response))
+              (swap! state update-in target dissoc ::mutation-response)))
           (call-mutation-action :ok-action env mutation params)
           (db.h/swap-entity! env dissoc ::mutation-response)))
       (db.h/swap-entity! env dissoc ::mutation-response-swap))))
@@ -160,12 +169,17 @@
   not be honored and no merge of the response will remain (only detect loading/errors of mutation).
   "
   [this mutation params]
-  (let [mutation (if (mi/mutation-declaration? mutation)
-                   (first (mutation params))
-                   mutation)]
-    (fp/ptransact! this `[(start-pmutation ~params)
-                          ~(list mutation params)
-                          (fulcro.client.data-fetch/fallback {:action mutation-network-error
-                                                              :params ~params
-                                                              ::ref   ~(fp/get-ident this)})
-                          (finish-pmutation ~{:mutation mutation :params params})])))
+  (let [mutation         (if (mi/mutation-declaration? mutation)
+                           (first (mutation params))
+                           mutation)
+        declared-refresh (:refresh (get-mutation {} mutation params))
+        _                (js/console.log :dr declared-refresh)
+        base-tx          `[(start-pmutation ~params)
+                           ~(list mutation params)
+                           (fulcro.client.data-fetch/fallback {:action mutation-network-error
+                                                               :params ~params
+                                                               ::ref   ~(fp/get-ident this)})
+                           (finish-pmutation ~{:mutation mutation :params params})]
+        tx               (cond-> base-tx
+                           (vector? declared-refresh) (into declared-refresh))]
+    (fp/ptransact! this tx)))
