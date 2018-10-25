@@ -132,8 +132,11 @@
           (when returning
             (fp/merge-component! reconciler returning mutation-response-swap))
           (when target
-            (if-let [return-value-ident (and target (fp/get-ident returning mutation-response-swap))]
-              (swap! (:state env) data-targeting/process-target return-value-ident target false)
+            (if-let [return-value-ident (and target returning (fp/get-ident returning mutation-response-swap))]
+              (do
+                (when (nil? (second return-value-ident))
+                  (log/warn "Targeted value of type " returning " did not generate a valid ident from the server return value: " mutation-response-swap))
+                (swap! (:state env) data-targeting/process-target return-value-ident target false))
               (swap! (:state env) data-targeting/process-target (conj ref ::mutation-response-swap) target false)))
           (call-mutation-action :ok-action env mutation params)
           (db.h/swap-entity! env dissoc ::mutation-response)))
