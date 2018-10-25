@@ -53,10 +53,14 @@
 
 (def ui-router (prim/factory TopRouter))
 
+;; END GENERATE CODE
+
 ;; SIMULATION: These two decls would be called by code IN the modules as they load, but we need them here to make the
 ;; buttons for our sim
 (declare module-1-loaded module-2-loaded)
 
+;; Much of the logic here would be in YOUR routing library (deciding when something needs loaded can just be a check
+;; against the registry...needs event stuff so that setting the route does not happen until loaded, etc.
 (defsc Root [this {:keys [router]}]
   {:query         [{:router (prim/get-query TopRouter)}]
    :initial-state {:router {}}}
@@ -82,8 +86,6 @@
       "Route to 2 (after simulating load)")
     (ui-router router)))
 
-;; internal code to load/swap between modules
-
 (ws/defcard router-demo-card
   {::wsm/card-width  2
    ::wsm/align       {:flex 1}
@@ -94,7 +96,10 @@
      ::f.portal/app        {:started-callback (fn [{:keys [reconciler]}])
                             :networking       (server/new-server-emulator (server/fulcro-parser) 300)}}))
 
-;; Module 1
+;; Module 1: Module can refer to placeholders...but the lib will need some way to supply the module-1-loaded code for use
+;; inside the module. Probably the way to do it is have them declare their top level router in a namespace , and then
+;; have the macro emit the definitions for the "loaded" callbacks.  Then all routes refer to that one ns, which won't pull
+;; in the alt routes...code splitting should be fine.
 
 (defsc Child1 [_ {:keys [child/name]}]
   {:ident         [:child/id :child/id]
@@ -109,6 +114,7 @@
    :query [{:some-child (prim/get-query Child1)}]}
   (ui-child1 some-child))
 
+;; something to trigger routing is needed here, possibly just a watch on the registry atom???
 (defn module-1-loaded [reconciler]
   (prim/set-query! reconciler Module1Placeholder {:query [::module-key {::screen (prim/get-query AltScreen1)}]})
   (swap! module-registry assoc ::module-1 (prim/factory AltScreen1)))
