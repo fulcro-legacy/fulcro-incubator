@@ -1,5 +1,16 @@
 # Change Log
 
+0.0.8
+-----
+- Made `pmutate!` honor declared refresh on the mutation
+- pmutate! now adds loading status to target entity, if targeting
+- `pmutate!` will not write a mutation response of "loading" with key into a
+declared target, so the target can display progress if necessary.
+
+0.0.7
+-----
+- Bugfix for pmutate!
+
 0.0.6
 -----
 - Added support for mutation interfaces to be used with `pmutate!`
