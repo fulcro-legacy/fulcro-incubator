@@ -16,7 +16,8 @@
 
 (defprotocol Routing
   (route-entered [this remaining-path] "Notifies the component that the current route has caused it to become visible.
-  remaining-path is a vector of URI components that were not interpreted by parents."))
+  remaining-path is a vector of URI components that were not interpreted by parents. Each router is responsible for passing this on, so composition can work,
+  but that can be wrapped in an automatic macro I think"))
 
 (defn- find-next-router* [ast-node]
   (let [c (:component ast-node)]
@@ -25,11 +26,13 @@
       (some #(find-next-router* %) (:children ast-node)))))
 
 (defn find-next-router
-  "Finds the next router available on the query, and returns it's component class. Returns nil if none are found."
+  "Finds the next router available on the given query (not including the top component on the query itself), and
+  returns it's component class. Returns nil if none are found."
   [query]
   (let [nodes (:children (prim/query->ast query))]
     (some #(find-next-router* %) nodes)))
 
+;; SEE TopRouter...this is just a placeholder, and doesn't show everything is should do
 (defsc DistantRouter [this props]
   {:query         ['*]
    :ident         (fn [] [:distant-router 1])
@@ -42,6 +45,7 @@
 
 (def ui-distant-router (prim/factory DistantRouter))
 
+;; SEE TopRouter...this is just a placeholder, and doesn't show everything is should do
 (defsc OtherRouter [this props]
   {:query         ['*]
    :ident         (fn [] [:other-router 1])
@@ -75,25 +79,37 @@
 
 (def ui-x (prim/factory X {:keyfn :db/id}))
 
-(defsc TopRouter [this {:keys [x]}]
-  {:query          [{:x (prim/get-query X)}]
-   :initial-state  {:x {}}
+;; THIS IS THE GENERAL PATTERN ALL ROUTERS WOULD HAVE
+(defsc TopRouter [this {:keys [child]}]
+  {:query          [{:child (prim/get-query X)}]
+   :initial-state  {:child {}}
    :ident          (fn [] [:top-router 1])
    :initLocalState (fn [] {:factory (prim/factory X)})
    :protocols      [static
                     Routing
                     (route-entered [this path]
+                      ;; This is the main logic that would really go in EACH router.  A router ONLY EVER has one child,
+                      ;; which need NOT be a router itself.  You can point a router at anything.   There MUST only ever
+                      ;; be AT MOST ONE router directly reachable through that child (without going *through* another router.
                       (let [state-map             (prim/component->state-map this)
+                            ;; Need to get the *live* query, since we're using dynamic queries
                             q                     (prim/get-query this state-map)
+                            ;; In order to render, we need to use the correct factory for our ONE child.
+                            ;; I'm putting in state so we don't have to recalculate it on every render.
                             immediate-child-class (:component (prim/query->ast1 q))
                             factory               (prim/factory immediate-child-class)
+                            ;; Then we look for that ONE reachable router
                             child-router          (find-next-router q)]
                         (prim/set-state! this {:factory factory})
                         (js/console.log "Entered TopRouter with " path " whose immediate child is a " immediate-child-class)
+                        ;; HERE is where we'd pull AS MANY components of `path` as WE need, and pass the rest off to
+                        ;; the child router.
+                        (let [my-path-element (first path)]
+                          (js/console.log "Top router consumed path element(s):" my-path-element))
                         (when child-router
                           (route-entered child-router (rest path)))))]}
   (let [f (prim/get-state this :factory)]
-    (when f (f x))))
+    (when f (f child))))
 
 (def ui-router (prim/factory TopRouter))
 
