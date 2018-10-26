@@ -250,11 +250,9 @@ the component-based mutation and read errors.
 
 === Example
 
-There is a full working example in the workspace cards.
-
-```
-include::src/workspaces/fulcro/incubator/flicker_free_ws.cljs[]
-```
+There is a full working example
+https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/workspaces/fulcro/incubator/flicker_free_ws.cljs[flicker_free_ws.cljs]
+in the workspace cards.
 
 == UI
 
