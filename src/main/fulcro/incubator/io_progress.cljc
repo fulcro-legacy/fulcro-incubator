@@ -140,3 +140,62 @@
            new-loading? (boolean (get-in props [df/marker-table (prim/get-ident this)]))
            new-status   (::pm/status mutation-response)]
        (or new-loading? (= :loading new-status)))))
+
+(defn update-io-progress!
+  "A helper to use with components to do flicker-free activity indicators in the UI:
+
+  ```
+   :componentDidUpdate (fn [pp ps] (util/update-loading-visible this pp {:timeout 200}))
+  ```
+
+  which will set the component-local state:
+
+  - :loading-delay? to true/false based on the current load marker status.
+  - :mutation-delay? to true/false based on the current ::pm/mutation-response.
+  - :io-delay? to true/false if EITHER there is a loading or mutation delay.
+
+  `this` - The component that has a targeted load or mutate.
+  `prior-props` - The prior props (from the args passed to componentDidUpdate).
+  `options` is an optional map that can include:
+    - `:timeout` - The amount of time to wait before things are considered \"delayed\". Defaults to 100ms.
+    - `:marker` - The name of the load marker to look for. Defaults to the ident of `this`.
+    - `:key` - A key to look for in the mutation response. If this is set, delays won't be reported unless the key
+               matches the ::pm/key sent to the `pmutate!`.
+
+  NOTE: This function currently assumes you are using *sequential* networking, so that only *one* mutation *or* load
+  is active at a time.
+  "
+  ([this prior-props] (update-io-progress! this prior-props {}))
+  ([this prior-props options]
+    #?(:cljs
+       (let [{:keys [timeout marker key]} options
+             load-marker    (or marker (prim/get-ident this))
+             timeout        (or timeout 100)
+             {old-response ::pm/mutation-response} prior-props
+             {::pm/keys [mutation-response] :as props} (prim/props this)
+             old-loading?   (df/loading? (get-in prior-props [df/marker-table load-marker]))
+             new-loading?   (df/loading? (get-in props [df/marker-table load-marker]))
+             old-status     (::pm/status old-response)
+             new-status     (::pm/status mutation-response)
+             io-active?     (or new-loading? (= :loading new-status))
+             reported-value (prim/get-state this :io-delay?)
+             io-started?    (and io-active? (or (not= old-loading? new-loading?) (not= old-status new-status)))]
+         (if io-started?
+           (let [old-timer (prim/get-state this :timer)
+                 timer     (js/setTimeout (fn []
+                                            (let [props     (prim/props this)
+                                                  ;; re-obtain them just in case this fires after they are already done.
+                                                  loading?  (boolean (get-in props [df/marker-table (prim/get-ident this)]))
+                                                  mutating? (= :loading (get-in props [::pm/mutation-response ::pm/status]))
+                                                  io-delay? (or loading? mutating?)]
+                                              (prim/set-state! this {:io-delay?       io-delay?
+                                                                     :loading-delay?  loading?
+                                                                     :mutation-delay? mutating?}))) timeout)]
+             (when old-timer (js/clearTimeout old-timer))
+             (prim/set-state! this {:timer timer}))
+           (when (and reported-value (not io-active?))
+             (let [timer (prim/get-state this :timer)]
+               (when timer (js/clearTimeout timer))
+               (prim/set-state! this {:loading-delay?  false
+                                      :mutation-delay? false
+                                      :io-delay?       false}))))))))
