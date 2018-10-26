@@ -2,6 +2,7 @@
   (:require [nubank.workspaces.core :as ws]
             [fulcro.incubator.workspaces.db-helpers-ws]
             [fulcro.incubator.mutation-interface-ws]
+            [fulcro.incubator.flicker-free-ws]
             [fulcro.incubator.pessimistic-mutations-ws]
             [fulcro.incubator.workspaces.ui.reakit-ws]))
 

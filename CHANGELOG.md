@@ -1,5 +1,12 @@
 # Change Log
 
+0.0.9
+-----
+- Added some helpers for flicker free progress updates and other state
+display to pessimistic mutations. These combine load marker support.
+- Added helpers for reading mutation errors and loading state for
+the "current" component.
+
 0.0.8
 -----
 - Made `pmutate!` honor declared refresh on the mutation
