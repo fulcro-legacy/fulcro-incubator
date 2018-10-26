@@ -8,16 +8,10 @@
     [fulcro.incubator.mutation-interface :as mi]
     [fulcro.client.mutations :as mutations]
     [fulcro.client.primitives :as fp]
-    [fulcro.client.data-fetch :as fetch]
     [fulcro.client.impl.data-targeting :as data-targeting]
     [fulcro.logging :as log]
-    [clojure.set :as set]
     [clojure.spec.alpha :as s]
     [fulcro.client.primitives :as prim]))
-
-;; a safe way to save component in app state
-(defn- response-component [component] (with-meta {} {:component component}))
-(defn- get-response-component [response] (-> response :component meta :component))
 
 (def error-states #{:api-error :network-error})
 
@@ -30,7 +24,7 @@
   NOTES: You *must not* compose this with Fulcro's `returning` or `with-target`.
   You should instead use the special keys of `pmutate`'s params.
   "
-  [{:keys [ast ref] :as env}]
+  [{:keys [ast ref]}]
   (when (:query ast)
     (log/error "You should not use mutation joins (returning) with `pmutate!`. Use the params of `pmutate!` instead."))
   (some-> ast
@@ -112,7 +106,7 @@
                           ::key    key}]
       (db.h/swap-entity! env assoc ::mutation-response {::status :loading
                                                         ::key    key})
-      (when (and target (map? (get-in @state target)))
+      (when (and (not (data-targeting/multiple-targets? target)) (vector? target) (map? (get-in @state target)))
         (swap! state assoc-in (conj target ::mutation-response) loading-marker)))
     nil))
 
