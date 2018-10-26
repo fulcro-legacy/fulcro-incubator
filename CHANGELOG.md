@@ -3,6 +3,7 @@
 0.0.8
 -----
 - Made `pmutate!` honor declared refresh on the mutation
+- pmutate! now adds loading status to target entity, if targeting
 
 0.0.7
 -----

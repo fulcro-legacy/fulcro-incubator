@@ -12,7 +12,8 @@
     [fulcro.client.impl.data-targeting :as data-targeting]
     [fulcro.logging :as log]
     [clojure.set :as set]
-    [clojure.spec.alpha :as s]))
+    [clojure.spec.alpha :as s]
+    [fulcro.client.primitives :as prim]))
 
 ;; a safe way to save component in app state
 (defn- response-component [component] (with-meta {} {:component component}))
@@ -74,9 +75,9 @@
   [env k p]
   (try
     (when-let [m (get (methods mutations/mutate) k)]
-     (m env k p))
+      (m env k p))
     (catch #?(:clj Exception :cljs :default) e
-      (log/error "Unable to read mutation. Some features of pmutate! may fail.  You should check your remote(s) to make sure they tolerate an empty env."))))
+      (log/error "Unable to read mutation. Some features of pmutate! may fail.  You should check your remote(s) to make sure they tolerate an empty env." e))))
 
 (defn call-mutation-action
   "Call a Fulcro client mutation action (defined on the multimethod fulcro.client.mutations/mutate). This
@@ -172,8 +173,8 @@
   (let [mutation         (if (mi/mutation-declaration? mutation)
                            (first (mutation params))
                            mutation)
-        declared-refresh (:refresh (get-mutation {} mutation params))
-        _                (js/console.log :dr declared-refresh)
+        declared-refresh (:refresh (get-mutation {:state (atom {}) :parser (constantly {}) ; to help keep remotes from crashing
+                                                  :ast   (prim/query->ast1 ['(noop)])} mutation params))
         base-tx          `[(start-pmutation ~params)
                            ~(list mutation params)
                            (fulcro.client.data-fetch/fallback {:action mutation-network-error
