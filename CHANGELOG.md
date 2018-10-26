@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.10
+------
+- Added `update-io-progress!` for flicker free io progress, but able to distinguish
+loads from mutations.
+
 0.0.9
 -----
 - Added some helpers for flicker free progress updates and other state
