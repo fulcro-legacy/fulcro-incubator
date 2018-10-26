@@ -36,6 +36,7 @@
 (defsc DistantRouter [this props]
   {:query         ['*]
    :ident         (fn [] [:distant-router 1])
+   :componentWillUnmount (fn [] (js/console.log "Distant router leaving the screen"))
    :initial-state {}
    :protocols     [static
                    Routing
@@ -49,6 +50,7 @@
 (defsc OtherRouter [this props]
   {:query         ['*]
    :ident         (fn [] [:other-router 1])
+   :componentWillUnmount (fn [] (js/console.log "Other router leaving the screen"))
    :initial-state {}
    :protocols     [static
                    Routing
