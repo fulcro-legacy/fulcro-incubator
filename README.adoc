@@ -195,6 +195,67 @@ technically see the mutation response if they query for it):
       (when (= :alt key) ...))))
 ```
 
+== Flicker-Free IO Progress and Errors
+
+Fulcro supplies everything you need in order to show progress and errors, but
+the addition of `pmutate!` and a bit of standardization makes it possible for us to create helpers that make
+flicker-free full-stack loading and mutation UI indicators.
+
+When your server is fast, you don't want to show a loading indicator.  When it's slow, you'd like the user to know
+something is happening.
+
+The support for arbitrary load markers in Fulcro's `load`, and targeted mutation response markers from `pmutate!` make
+this relatively easy. The steps are as follows:
+
+. Add a call to `ui-progress/update-loading-visible!` in your `componentDidUpdate` lifecycle method.
+** Optionally set the load marker name and timeout via the optional parameter map.
+** (NOT IMPLEMENTED YET) Optionally set the `:key` to distinguish instances (TODO)
+. Add `[fulcro.client.data-fetch/marker-table '_]` (for load progress) and `:fulcro.incubator.pessimistic-mutations/mutation-response`
+  (for mutation progress) to your component's query.
+. Read the component local state value of `:loading-visible?` in your component.
+. Render your progress marker if it is true.
+. When you issue loads, be *sure* to set the `:marker` option of the load to your component's ident.
+. Mutation progress is automatic with `pmutate!`, as long as the mutation response is in the component query.
+
+=== Preventing Double-submission
+
+The flicker-free code will give you a delayed indicator, so if you use that to disable controls you'll have
+a time period where the user can press buttons.
+
+The `io-progress/busy?` function returns the immediate status of the component by looking at the
+current props, and returns true if either a load OR mutation has started.  It also requires the query to
+contain the data fetch marker table and the pessimistic mutation response, as described above.
+
+=== Reading Errors
+
+Since the setup above will put errors in a predictable location, we also provide these utility functions:
+
+`mutation-error`:: Returns false if there is no mutation error.  When there is a mutation error it will attempt
+to return the `::pm/mutation-errors` field. If that is not found, then it returns the entire mutation response.
+`load-error`:: Returns false if there is no load error, otherwise returns the Fulcro data fetch marker that is
+in a failed state.
+`io-error`:: Returns false if there are no read/mutation errors (requires the query be correct). If there is an
+error, it returns what `load-error` or `mutation-error` would have returned.
+
+=== Clearing Errors
+
+The `io-progress` namespace also includes a Fulcro *mutation* for the client called `clear-errors`, and
+a mutation helper `clear-errors*` that can be used on the state map.  These can be used to clear out
+the component-based mutation and read errors.
+
+```
+;; Clear any errors on this component
+(prim/transact this `[(clear-errors)])
+```
+
+=== Example
+
+There is a full working example in the workspace cards.
+
+```
+include::src/workspaces/fulcro/incubator/flicker_free_ws.cljs[]
+```
+
 == UI
 
 [`fulcro.incubator.ui.core`](https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/ui/core.cljs)

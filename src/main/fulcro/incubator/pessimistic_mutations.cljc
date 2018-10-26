@@ -6,12 +6,13 @@
   (:require
     [fulcro.incubator.db-helpers :as db.h]
     [fulcro.incubator.mutation-interface :as mi]
-    [fulcro.client.mutations :as mutations]
+    [fulcro.client.mutations :as mutations :refer [defmutation]]
     [fulcro.client.primitives :as fp]
     [fulcro.client.impl.data-targeting :as data-targeting]
     [fulcro.logging :as log]
     [clojure.spec.alpha :as s]
-    [fulcro.client.primitives :as prim]))
+    [fulcro.client.primitives :as prim]
+    [fulcro.client.data-fetch :as df]))
 
 (def error-states #{:api-error :network-error})
 
@@ -178,3 +179,4 @@
         tx               (cond-> base-tx
                            (vector? declared-refresh) (into declared-refresh))]
     (fp/ptransact! this tx)))
+

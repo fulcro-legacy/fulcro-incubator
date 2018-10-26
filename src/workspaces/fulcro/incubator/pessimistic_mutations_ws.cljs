@@ -3,9 +3,10 @@
     [nubank.workspaces.core :as ws]
     [fulcro.client.primitives :as fp :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
-    [fulcro.server :as server]
+    [fulcro.server :as server :refer [defquery-root]]
     [fulcro-spec.core :refer [specification assertions]]
     [fulcro.incubator.pessimistic-mutations :as pm]
+    [fulcro.incubator.io-progress :as ip]
     [fulcro.client.dom :as dom]
     [nubank.workspaces.model :as wsm]
     [nubank.workspaces.card-types.fulcro :as ct.fulcro]
@@ -15,13 +16,16 @@
     [fulcro.client.primitives :as prim]
     [fulcro.incubator.mutation-interface :as mi]))
 
-(defsc TodoItem [_ _]
-  {:ident [:item/id :item/id]
-   :query [:item/id :item/name]})
 
-(defsc TodoList [_ _]
-  {:ident [:list/id :list/id]
-   :query [:list/id :list/name {:list/items (fp/get-query TodoItem)}]})
+
+(defsc TodoItem [this {:keys [item/label item/done?]}]
+  {:query [:db/id :item/label :item/done?
+           ::pm/mutation-response]
+   :ident [:todo-item/by-id :db/id]})
+
+(defsc TodoList [this {:keys [list/title list/items] :as props}]
+  {:query [:db/id :list/title {:list/items (prim/get-query TodoItem)}]
+   :ident [:todo-list/by-id :db/id]})
 
 (server/defmutation do-something-good [_]
   (action [env]
@@ -83,13 +87,14 @@
                                                                           ::pm/target    (df/multiple-targets
                                                                                            [:main-list]
                                                                                            (df/append-to [:all-lists]))})} "Good Mutation")
-    "Hi"))
+    (dom/h1 "See Javascript Console for Behavior Output")))
 
 (ws/defcard pmutation-card
-  {::wsm/card-width 2 ::wsm/card-height 13}
+  {::wsm/card-width 4 ::wsm/card-height 2}
   (ct.fulcro/fulcro-card
     {::f.portal/root       DemoComponent
      ::f.portal/wrap-root? true
      ::f.portal/app        {:started-callback (fn [{:keys [reconciler]}]
                                                 (swap! (prim/app-state reconciler) assoc :all-lists []))
                             :networking       (server/new-server-emulator (server/fulcro-parser) 300)}}))
+
