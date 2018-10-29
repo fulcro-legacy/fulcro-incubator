@@ -56,3 +56,11 @@
         ~tx)))
 
 (defn mutation-declaration? [expr] (= Mutation (type expr)))
+
+(defn mutation-symbol
+  "Return the real symbol (for mutation dispatch) of `mutation`, which can be a symbol (this function is then identity)
+   or a mutation-declaration."
+  [mutation params]
+  (if (mutation-declaration? mutation)
+    (first (mutation params))
+    mutation))
