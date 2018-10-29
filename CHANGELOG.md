@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.11-1
+--------
+- Removed stray console.log 
+
 0.0.11
 ------
 - Added a `ptransact!` that is capable of composing pmutations with all other kinds.
