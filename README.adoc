@@ -195,6 +195,38 @@ technically see the mutation response if they query for it):
       (when (= :alt key) ...))))
 ```
 
+=== Composition
+
+Version 0.0.11 includes a `ptransact!` in `pessimistic-mutations` that works just like Fulcro's `ptransact!`,
+but also supports the special behavior of pessimistic mutations (ok/error actions):
+
+```
+(pm/ptransact! this `[(local-mutation) (normal-remote-mutation) (pmutation) (other-mutation)])
+```
+
+will correctly delay at each remote-based mutation, and when it detects a mutation that is correctly
+declared as a pessimistic mutation is will also trigger the proper error/ok actions.
+
+==== Aborting a Sequence
+
+When using the composition the default behavior is for the mutation to run all elements, even if one
+has an error.  In order to short-circuit, the `error-action` (or follow-up mutation) must put something
+in state that tells the remaining mutations not to run.
+
+WARNING: Your pmutations MUST return `(pessimistic-mutation env)` from a remote or they will not be
+properly detected. Thus to short-circuit properly they should be written something like this:
+
+```
+(defmutation short-circuiting-mutation [_]
+  (ok-action [env] ...)
+  (remote [env]
+    (when-not (state-has-error-marker env)
+      (pm/pessimistic-mutation env))))
+```
+
+This ensures that detection should work (the detection sends empty state to the remote), but during operation
+the actual state will cause it to keep from firing.
+
 == Flicker-Free IO Progress and Errors
 
 Fulcro supplies everything you need in order to show progress and errors, but

@@ -12,7 +12,8 @@
     [fulcro.logging :as log]
     [clojure.spec.alpha :as s]
     [fulcro.client.primitives :as prim]
-    [fulcro.client.data-fetch :as df]))
+    [fulcro.client.data-fetch :as df]
+    [clojure.set :as set]))
 
 (def error-states #{:api-error :network-error})
 
@@ -31,7 +32,12 @@
   (some-> ast
     (update :params dissoc ::returning ::target)
     (cond-> (:query ast) (update :query vary-meta dissoc :component))
-    (mutations/with-target (conj ref ::mutation-response-swap))))
+    (mutations/with-target (conj ref ::mutation-response-swap))
+    (vary-meta assoc ::pessimistic-mutation true)))
+
+(defn- pessimistic-mutation?
+  [ast]
+  (-> ast meta ::pessimistic-mutation))
 
 (defn mutation-response
   "Retrieves the mutation response from `this-or-props` (a component or props).  Can also be used against the state-map with an ident."
@@ -147,6 +153,26 @@
           (db.h/swap-entity! env dissoc ::mutation-response)))
       (db.h/swap-entity! env dissoc ::mutation-response-swap))))
 
+(def ^:private fake-env {:state (atom {}) :parser (constantly {}) ; to help keep remotes from crashing
+                         :ast   (prim/query->ast1 ['(noop)])})
+
+;; bug in fulcro spec make it untestable unless I wrapped this :(
+(defn- get-ident [c] (fp/get-ident c))
+
+(defn- pmutation->ptransaction
+  [this mutation params]
+  (let [mutation         (mi/mutation-symbol mutation params)
+        declared-refresh (:refresh (get-mutation fake-env mutation params))
+        base-tx          `[(start-pmutation ~params)
+                           ~(list mutation params)
+                           (fulcro.client.data-fetch/fallback {:action mutation-network-error
+                                                               :params ~params
+                                                               ::ref   ~(get-ident this)})
+                           (finish-pmutation ~{:mutation mutation :params params})]
+        tx               (cond-> base-tx
+                           (vector? declared-refresh) (into declared-refresh))]
+    tx))
+
 (defn pmutate!
   "Run a pmutation defined by `defpmutation`.
 
@@ -165,18 +191,47 @@
   not be honored and no merge of the response will remain (only detect loading/errors of mutation).
   "
   [this mutation params]
-  (let [mutation         (if (mi/mutation-declaration? mutation)
-                           (first (mutation params))
-                           mutation)
-        declared-refresh (:refresh (get-mutation {:state (atom {}) :parser (constantly {}) ; to help keep remotes from crashing
-                                                  :ast   (prim/query->ast1 ['(noop)])} mutation params))
-        base-tx          `[(start-pmutation ~params)
-                           ~(list mutation params)
-                           (fulcro.client.data-fetch/fallback {:action mutation-network-error
-                                                               :params ~params
-                                                               ::ref   ~(fp/get-ident this)})
-                           (finish-pmutation ~{:mutation mutation :params params})]
-        tx               (cond-> base-tx
-                           (vector? declared-refresh) (into declared-refresh))]
+  (let [tx (pmutation->ptransaction this mutation params)]
     (fp/ptransact! this tx)))
 
+(defn pmutation?
+  "Returns true if the given mutation (symbol or mutation declaration) has a signature that looks like a pmutation. That
+  is to say it has an `ok-action` or `error-action` or returns `pessimistic-mutation` from one of its remotes. This function
+  will issue a warning if the given mutation uses extended actions, but *fails* to return the proper `pessimistic-mutation`
+  as well."
+  [legal-remotes mutation params]
+  (let [mutation        (mi/mutation-symbol mutation params)
+        special-actions #{:ok-action :error-action}
+        mutation-map    (get-mutation fake-env mutation params)
+        pactions?       (set/subset? (keys mutation-map) special-actions)
+        premote?        (boolean (some (fn [remote] (pessimistic-mutation? (get mutation-map remote))) legal-remotes))]
+    (js/console.log :a pactions? :r premote?)
+    (when (and pactions? (not premote?))
+      (log/error (str "ERROR: " mutation "has an ok-action or error-action, but does *not* use `pessimistic-mutation` on any remote.")))
+    ;; technically it will only be properly processed as a pmutate! if it has a premote.
+    premote?))
+
+(defn mixed-tx->ptransaction
+  "Convert a tx that is a mix of normal mutations and pmutations into a tx that can be safely run with fulcro.primitives/ptransact!"
+  [this tx]
+  (let [reconciler    (prim/get-reconciler this)
+        legal-remotes (some-> reconciler :config :remotes set)]
+    (into []
+      (mapcat
+        (fn [element]
+          (let [[msym params] (when (list? element) element)]
+            (if (pmutation? legal-remotes msym params)
+              (pmutation->ptransaction this msym params)
+              [element]))))
+      tx)))
+
+(defn ptransact!
+  "Just like Fulcro `ptransact!`, except it auto-detects `pmutate!` mutations and expands them to the proper form, allowing
+  you to compose any kind of mutation together into a single, functioning transaction:
+
+  ```
+  (pi/ptransact! this `[(local-mutation) (normal-remote-mutation) (pmutate-mutation) (local-mutation)])
+  ```
+  "
+  ([this ref tx] (prim/ptransact! this ref (mixed-tx->ptransaction this tx)))
+  ([this tx] (prim/ptransact! this (mixed-tx->ptransaction this tx))))
