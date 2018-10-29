@@ -205,7 +205,6 @@
         mutation-map    (get-mutation fake-env mutation params)
         pactions?       (set/subset? (keys mutation-map) special-actions)
         premote?        (boolean (some (fn [remote] (pessimistic-mutation? (get mutation-map remote))) legal-remotes))]
-    (js/console.log :a pactions? :r premote?)
     (when (and pactions? (not premote?))
       (log/error (str "ERROR: " mutation "has an ok-action or error-action, but does *not* use `pessimistic-mutation` on any remote.")))
     ;; technically it will only be properly processed as a pmutate! if it has a premote.
