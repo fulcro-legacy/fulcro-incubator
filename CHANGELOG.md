@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.11
+------
+- Added a `ptransact!` that is capable of composing pmutations with all other kinds.
+
 0.0.10
 ------
 - Added `update-io-progress!` for flicker free io progress, but able to distinguish
