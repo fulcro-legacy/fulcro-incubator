@@ -1,8 +1,6 @@
 (ns fulcro.incubator.defsc-extension-ws
   (:require-macros
-    [fulcro.incubator.defsc-foo :refer [defsc-foo]]
-    [fulcro.incubator.defsc-extensions :refer [gen-dom-macros]]
-                   )
+    [fulcro.incubator.defsc-foo :refer [defsc-foo]])
   (:require
     [fulcro.client.data-fetch :as df]
     [fulcro.client.dom :as dom]
@@ -17,41 +15,31 @@
     [nubank.workspaces.lib.fulcro-portal :as f.portal]
     [nubank.workspaces.model :as wsm]))
 
-#_(defsc-foo TestComponent [this props]
+(defsc-foo TestComponent [this props]
     {:special (fn [] (js/console.log "Did special thing!"))}
-    (dom/div
-      (dom/button {:onClick (fn [] (foo/special TestComponent))} "Try it!!!")))
-
-(fulcro.client.primitives/defsc
-    TestComponent
-    [this props]
-    {:query         [:a],
-     :ident         (fn [] [:table 1]),
-     :initial-state {:a 1},
-     :protocols     [static
-                     Other
-                     (special [this] (js/console.log "Did special thing!"))]}
     (dom/div
       (dom/button {:onClick (fn [] (special TestComponent))} "Try it!!!")))
 
-#_(defsc-foo TestComponent [this props]
-  {:query         [:a]
-   :ident         (fn [] [:table 1])
-   :initial-state {:a 1}
-   :special       (fn [] true)}
+#_(fulcro.client.primitives/defsc
+  TestComponent
+  [this props]
+  {:query         [:a],
+   :ident         (fn [] [:table 1]),
+   :initial-state {:a 1},
+   :protocols     [static
+                   Other
+                   (special [this] (js/console.log "Did special thing!"))]}
   (dom/div
     (dom/button {:onClick (fn [] (special TestComponent))} "Try it!!!")))
 
+#_(defsc-foo TestComponent [this props]
+    {:query         [:a]
+     :ident         (fn [] [:table 1])
+     :initial-state {:a 1}
+     :special       (fn [] true)}
+    (dom/div
+      (dom/button {:onClick (fn [] (special TestComponent))} "Try it!!!")))
 
-(gen-dom-macros )
-
-(js/console.log (pr-str (macroexpand-1 '(defsc-foo TestComponent [this props]
-                                          {:query         [:a]
-                                           :ident         (fn [] [:table 1])
-                                           :initial-state {:a 1}
-                                           :special       (fn [] true)}
-                                          (dom/div
-                                            (dom/button {:onClick (fn [] (special TestComponent))} "Try it!!!"))))))
 (ws/defcard extended-defsc-trial-card
   {::wsm/card-width  4
    ::wsm/align       {:flex 1}

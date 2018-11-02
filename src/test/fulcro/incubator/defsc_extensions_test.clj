@@ -133,14 +133,4 @@
           {:ident [:table :id]}
           (dom/div "TODO"))))
 
-(deftest defextended-defsc-test
-  (is (= '(clojure.core/defmacro
-            defsc-router
-            [& forms]
-            (fulcro.incubator.defsc-extensions/rewrite-defsc-protocols
-              &env
-              forms
-              [[fulcro.incubator.defsc-extensions-test/Other true]]))
-        (macroexpand-1 `(dext/defextended-defsc ~'defsc-router [[Other true]])))))
-
 

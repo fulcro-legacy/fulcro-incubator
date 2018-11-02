@@ -120,6 +120,11 @@ sym - The symbol to report in the error message (in case the rewrite uses a diff
        (concat new-forms body))))
 
 #?(:clj
+   (defn- emit [env macro-name supported-protocols]
+     `(defmacro ~macro-name [& ~'forms]
+        ~(rewrite-defsc-protocols env 'forms supported-protocols))))
+
+#?(:clj
    (defmacro defextended-defsc
      "Create a macro that works like defsc, but accepts protocol methods as keyword options and transforms them into
      the proper protocol support.
@@ -143,10 +148,7 @@ sym - The symbol to report in the error message (in case the rewrite uses a diff
      only plan to use it in CLJS).
      "
      [macro-name supported-protocols]
-     (let [f `(println "Hi")]
-       `(defmacro ~macro-name [& ~'forms]
-          (let [~'result (rewrite-defsc-protocols ~'&env ~'forms ~supported-protocols)]
-            ~'result)))))
+     (emit &env macro-name supported-protocols)))
 
 
 
