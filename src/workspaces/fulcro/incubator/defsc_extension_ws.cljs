@@ -16,29 +16,12 @@
     [nubank.workspaces.model :as wsm]))
 
 (defsc-foo TestComponent [this props]
-    {:special (fn [] (js/console.log "Did special thing!"))}
-    (dom/div
-      (dom/button {:onClick (fn [] (special TestComponent))} "Try it!!!")))
-
-#_(fulcro.client.primitives/defsc
-  TestComponent
-  [this props]
   {:query         [:a],
    :ident         (fn [] [:table 1]),
    :initial-state {:a 1},
-   :protocols     [static
-                   Other
-                   (special [this] (js/console.log "Did special thing!"))]}
+   :special       (fn [] (js/console.log "Did special thing!"))}
   (dom/div
     (dom/button {:onClick (fn [] (special TestComponent))} "Try it!!!")))
-
-#_(defsc-foo TestComponent [this props]
-    {:query         [:a]
-     :ident         (fn [] [:table 1])
-     :initial-state {:a 1}
-     :special       (fn [] true)}
-    (dom/div
-      (dom/button {:onClick (fn [] (special TestComponent))} "Try it!!!")))
 
 (ws/defcard extended-defsc-trial-card
   {::wsm/card-width  4

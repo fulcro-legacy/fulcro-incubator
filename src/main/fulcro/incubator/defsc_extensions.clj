@@ -30,7 +30,7 @@ sym - The symbol to report in the error message (in case the rewrite uses a diff
 
 (defn morph-option-to-method [env this-sym target-name required-args user-fn]
   (let [user-arity (dec (count required-args))]
-    (replace-and-validate-fn env target-name [this-sym] user-arity user-fn)))
+    (apply list (replace-and-validate-fn env target-name [this-sym] user-arity user-fn))))
 
 (defn morph-options-to-methods [env this-sym methods incoming-defsc-options]
   (mapv
@@ -52,8 +52,7 @@ sym - The symbol to report in the error message (in case the rewrite uses a diff
         refined-methods (morph-options-to-methods env this-sym methods incoming-defsc-options)]
     (when (empty? methods)
       (report env incoming-defsc-options (str "Cannot extend support for empty (or missing) protocol " protocol)))
-    `[~@preamble
-      ~@refined-methods]))
+    (into preamble refined-methods)))
 
 (s/def ::protocol-specifier (s/tuple symbol? boolean?))
 (s/def ::supported-protocols (s/coll-of ::protocol-specifier :kind vector?))
@@ -70,8 +69,7 @@ sym - The symbol to report in the error message (in case the rewrite uses a diff
   [env thissym options supported-protocols]
   (when-not (s/valid? ::supported-protocols supported-protocols)
     (report env supported-protocols "Supported protocols is not a vector of vectors of sym/boolean."))
-  (let [
-        existing-protocols (get options :protocols [])]
+  (let [existing-protocols (get options :protocols [])]
     (reduce
       (fn [protocols [protocol-sym static?]]
         (into protocols (emit-protocol env thissym protocol-sym options static?)))

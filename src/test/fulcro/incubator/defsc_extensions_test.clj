@@ -52,7 +52,12 @@
                                         :method-2 '(fn [] (foo 2))} true) => '[static fulcro.incubator.defsc-extensions-test/MyThing (method-1 [t] (boo 1)) (method-2 [t] (foo 2))]
     "emits the correct forms for embedding a non-static protocol in defsc :protocols option"
     (dext/emit-protocol {} 't `MyThing {:method-1 '(fn [] (boo 1))
-                                        :method-2 '(fn [] (foo 2))} false) => '[fulcro.incubator.defsc-extensions-test/MyThing (method-1 [t] (boo 1)) (method-2 [t] (foo 2))]))
+                                        :method-2 '(fn [] (foo 2))} false) => '[fulcro.incubator.defsc-extensions-test/MyThing (method-1 [t] (boo 1)) (method-2 [t] (foo 2))]
+    "emits method bodies as actual lists"
+    (-> (dext/emit-protocol {} 't `MyThing {:method-1 '(fn [] (boo 1))
+                                            :method-2 '(fn [] (foo 2))} false)
+      second
+      list?) => true))
 
 (deftest defsc-options->protocols-test
   (assertions
