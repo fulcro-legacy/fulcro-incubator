@@ -110,8 +110,8 @@ sym - The symbol to report in the error message (in case the rewrite uses a diff
     (concat new-forms body)))
 
 (defn- emit [env macro-name supported-protocols]
-  `(defmacro ~macro-name [& ~'forms]
-     ~(rewrite-defsc-protocols env 'forms supported-protocols)))
+  `(defmacro ~macro-name [~'& ~'forms]
+     (rewrite-defsc-protocols ~env ~'forms ~supported-protocols)))
 
 (defmacro defextended-defsc
   "Create a macro that works like defsc, but accepts protocol methods as keyword options and transforms them into

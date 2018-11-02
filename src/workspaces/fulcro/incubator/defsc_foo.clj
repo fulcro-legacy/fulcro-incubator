@@ -4,4 +4,3 @@
     [fulcro.incubator.defsc-extensions :refer [defextended-defsc]]))
 
 (defextended-defsc defsc-foo [[`Other true]])
-
