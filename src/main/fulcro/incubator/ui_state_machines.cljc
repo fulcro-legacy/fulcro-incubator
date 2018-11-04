@@ -1,39 +1,15 @@
 (ns fulcro.incubator.ui-state-machines
-  #?(:cljs (:require-macros [ucv.lib.ui-state-machines]))
+  #?(:cljs (:require-macros [fulcro.incubator.ui-state-machines]))
   (:require
     [fulcro.client.mutations :as m :refer [defmutation]]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.incubator.mutation-interface :as mi]
-    [ghostwheel.core :as g :refer [=> | <-]]
     [clojure.spec.alpha :as s]
     [fulcro.util :as futil]
+    [fulcro.incubator.spec-helpers :refer [Defn =>]]
     [clojure.set :as set]
     [taoensso.timbre :as log]
     [clojure.spec.test.alpha :as st]))
-
-#?(:clj (defmacro dev-instrument! [f]
-          (when (and (nil? (:ns &env)) (System/getProperty "dev"))
-            `(st/instrument ~f))))
-
-#?(:clj (defmacro Defn [& forms]
-          (if (:ns &env)                                    ; cljs?
-            `(g/>defn ~@forms)
-            (let [sym   (first forms)
-                  nspc  (some-> (resolve sym) meta :ns str)
-                  fqsym (symbol nspc (name sym))]
-              `(do
-                 (g/>defn ~@forms)
-                 (dev-instrument! (quote ~fqsym)))))))
-
-#?(:clj (defmacro Defn- [& forms]
-          (if (:ns &env)                                    ; cljs?
-            `(g/>defn- ~@forms)
-            (let [sym   (first forms)
-                  nspc  (some-> (resolve sym) meta :ns str)
-                  fqsym (symbol nspc (name sym))]
-              `(do
-                 (g/>defn- ~@forms)
-                 (dev-instrument! (quote ~fqsym)))))))
 
 ;; Active State Machine and ENV specs
 (s/def ::state-map map?)
@@ -256,9 +232,9 @@
   ([env plugin-name explicit-args]
     [::env keyword? (s/nilable map?) => any?]
     (log/debug "Run plugin " plugin-name)
-    (when-let [plugin (spy (lookup-state-machine-field env [::plugins plugin-name]))]
+    (when-let [plugin (lookup-state-machine-field env [::plugins plugin-name])]
       (let [params (merge (aliased-data env) explicit-args)]
-        (plugin (spy params))))))
+        (plugin params)))))
 
 (Defn exit
   "Indicate that the state machine is done."
@@ -323,11 +299,11 @@
   "Trigger an event on an active state machine. Safe to use in mutation bodies."
   ([this active-state-machine-id event-id] (trigger! this active-state-machine-id event-id {}))
   ([this active-state-machine-id event-id extra-data]
-   (js/setTimeout
-     #(prim/transact! this [(trigger-state-machine-event {::asm-id     active-state-machine-id
-                                                          ::event-id   event-id
-                                                          ::event-data extra-data})])
-     0)))
+    #?(:cljs (js/setTimeout
+               #(prim/transact! this [(trigger-state-machine-event {::asm-id     active-state-machine-id
+                                                                    ::event-id   event-id
+                                                                    ::event-data extra-data})])
+               0))))
 
 (defn set-string!
   "Similar to Fulcro's set-string, but it sets the string on an active state machine's data alias.

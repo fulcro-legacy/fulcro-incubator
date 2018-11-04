@@ -10,7 +10,8 @@
 
            :dev {:extra-paths ["src/workspaces"]
 
-                 :extra-deps  {fulcrologic/fulcro-inspect {:mvn/version "2.2.4"}
-                               binaryage/devtools         {:mvn/version "0.9.10"}
-                               nubank/workspaces          {:mvn/version "1.0.0-preview9"}
-                               fulcrologic/fulcro-spec    {:mvn/version "2.1.2"}}}}}
+                 :extra-deps  {fulcrologic/fulcro-inspect             {:mvn/version "2.2.4"}
+                               fulcrologic/semantic-ui-react-wrappers {:mvn/version "2.0.3"}
+                               binaryage/devtools                     {:mvn/version "0.9.10"}
+                               nubank/workspaces                      {:mvn/version "1.0.0-preview9"}
+                               fulcrologic/fulcro-spec                {:mvn/version "2.1.2"}}}}}
