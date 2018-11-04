@@ -30,6 +30,12 @@ ifdef::env-github[]
 toc::[]
 endif::[]
 
+WARNING: WORK IN PROGRESS. This is not yet part of a formal release of even incubator.  Many of the
+helper functions have not been tested (or even used), and are likely broken.  The functions in the
+demo work, and everything that is documented here seems to work as well.  If you go reading the code
+and decide to try something, there is a fair chance it won't work.  I'm developing this very
+rapidly, so expect it to become stable soon.
+
 User interfaces are full of interactions that beg for the help of state machines. Just a simple
 login form is usually quite difficult to code (independent of tools) because
 its behavior depends on a number of factors...factors that are actually quite easy to represent
