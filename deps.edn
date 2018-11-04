@@ -1,5 +1,7 @@
 {:paths   ["src/main" "src/test"]
 
+ :deps    {gnl/ghostwheel {:mvn/version "0.2.3"}}
+
  :aliases {:provided
                 {:extra-deps {org.clojure/clojure    {:mvn/version "1.9.0"}
                               thheller/shadow-cljs   {:mvn/version "2.6.23"}

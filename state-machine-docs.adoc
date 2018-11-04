@@ -1,0 +1,384 @@
+= UI State Machines
+:author: Tony Kay
+:revdate: November 2, 2018
+:revnumber: 1
+:lang: en
+:encoding: UTF-8
+:doctype: book
+:source-highlighter: coderay
+:source-language: clojure
+:toc: left
+:toclevels: 2
+:sectlinks:
+:sectanchors:
+:leveloffset: 1
+:sectnums:
+:imagesdir: assets/img
+:scriptsdir: js
+:imagesoutdir: docs/assets/img
+:favicon: assets/favicon.ico
+
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+ifdef::env-github[]
+toc::[]
+endif::[]
+
+User interfaces are full of interactions that beg for the help of state machines. Just a simple
+login form is usually quite difficult to code (independent of tools) because
+its behavior depends on a number of factors...factors that are actually quite easy to represent
+with state machines, but get ugly quickly when spread out in various code artifacts.
+
+This is not a new idea.  People have been using state machines to control user interfaces
+and graphics systems for decades.  For some reason most UI libraries and frameworks don't usually have
+a well-known or particularly general-use state machine toolkit.  Part of the problem is that
+a state machine needs to interact with actual UI state and vice-versa, so it is difficult
+to "bolt on" something, and there is often a lot of "glue code" to make the two hang together
+properly.
+
+It turns out that Fulcro's approach to UI is quite easily amenable to state machines because it
+has the following facets:
+
+- Application state is just data.
+- The application database is normalized. It is very easy to describe where particular bits of
+  data are in a non-ambiguous manner.
+- The UI refresh is *based on* the normalized data model, and not the UI structure.  Triggering
+refreshes requires only that you know what data your changing.
+
+Thus, it turns out to be quite easy to build a state machine system for Fulcro
+with the following properties:
+
+. The state machine doesn't need not know anything about the UI
+. The UI only needs to support displaying the declared state of the state machine.
+. Simple aliasing can map the state machine "values" onto Fulcro database values.
+. The aliasing makes it possible to re-use state machines on UIs that have varying shapes, and need
+not even name their Fulcro state according to the state machine's conventions.
+. State machines can be *instanced*, so that more than one of the same kind can be running at once.
+. Active state machine data is stored in Fulcro's app database, so it honors all history properties (e.g.
+support viewer, etc.)
+. Any number of simultaneous state machines of varying type can be running at once.
+. The state machine declarations are reusable, and make it easy to "derive" new
+definitions based on existing ones.
+
+== Aliases
+
+The first powerful concept for our state machines is aliasing.  The first kind of aliasing is
+for the "actors" that will participate in our UI.  An actor is simply a keyword defined in the
+state machine declaration, and is meant to stand for "some UI component".  The actions
+of a state machine can then be written to abstractly refer to that component without
+actually needing to know anything else about it:
+
+The `uism` alias is for the `ui-state-machine` namespace.
+
+```
+(defstatemachine login
+  {::uism/actor-names #{:dialog :form}
+   ...})
+```
+
+In this example we plan to have a "dialog" and a "form" on the UI.  These could be separate UI
+components, or could be the same.  It doesn't matter to the state machine!
+
+The next layer of aliasing is for the data our state machine will manipulate:
+
+```
+(defstatemachine login
+  {::uism/actor-names #{:dialog :form}
+   ::uism/aliases {:visible?       [:dialog :ui/active?]
+                   :login-enabled? [:form :ui/login-enabled?]
+                   :busy?          [:form :ui/busy?]
+                   :error          [:form :ui/login-error]
+                   :username       [:form :user/email]
+                   :password       [:form :user/password]}
+   ...})
+```
+
+These aliases are based, as you can see, on the actor names.  `:visible?`, for example,
+is an alias for the `:dialog` actor's `:ui/active?` property.  This mapping can be easily overriden
+in a "derived" state machine by simple data manipulation:
+
+```
+(defstatemachine my-login
+  (assoc-in login [::uism/aliases :visible?] [:dialog :ui/open?]))
+```
+
+This makes it possible to easily build a library of state machines that work on your app state
+in a very general and configurable way without having to change any actual logic!
+
+== Plugins
+
+In order for a state machine to be as reusable as possible we'd also like to be able to write
+logic that the state machine uses in a form that can be easily changed.  We call these bits of
+logic "plugins".  The are simply functions that will receive a map of the current UI state
+(by alias name) and will do some calculation.  They are meant to be side-effect free
+calculations.
+
+In a login form we usually don't want them to be able to press "Login" (or enter) until both
+username and password fields have something in them.  If the username is an email we might also
+want to check that it looks like a valid email before allowing submission.
+
+The state machine can come with a simple plugin like this:
+
+```
+   ::uism/plugins     {:valid-credentials? (fn [{:keys [username password]}]
+                                             (and (seq username) (seq password)))}
+```
+
+that just checks that the fields are non-empty, and someone could easily provide an alternative
+implementation with the trick shown for overriding an alias in <<Aliases, aliases>>.
+
+== States
+
+The final bit of a state machine definition is, of course, the actual *states*.  In our
+system we define these as a map from user-defined state name to a function that will
+receive the running state machine environment for all events triggered on that state machine.
+
+The states *must* include an `:initial` state, whose handler will be invoked with a
+`::uism/started` event when the state machine is first started.  The "current state"
+handler is always invoked for each event that is triggered while it is active, but
+only the `:initial` state sees a `::uism/started` event.
+
+```
+   ::uism/states  {:initial
+                   {::uism/handler
+                     (fn [env]
+                       (log/info "Initial state.")
+                       ...)}}
+```
+
+NOTE: Future work? Should "::uism/started" be an event for every state transition? I didn't write it
+that way yet for a couple of reasons..one of which being that it would be easy to get into
+infinite state loops that way.  The current implementation will only ever run one state
+handler per event.
+
+== Writing Handlers and Data Manipulation
+
+From here it's pretty easy.  The handlers are functions that receive a SM environment and
+must return a SM environment (or nil, which is considered "no change"). Since the
+environment is an immutable value, you will typically thread a sequence of these
+together to end up with a final result to return from the handler:
+
+```
+(fn [env]
+  (-> env
+     (uism/set-aliased-value :visible? true)
+     ...))
+```
+
+The library includes functions for dealing with Fulcro state via the aliases we've defined:
+
+`(uism/set-aliased-value env alias new-value)`:: Sets Fulcro state associated with the given alias
+to the given new value.
+`(uism/alias-value env alias)`:: Gets the current Fulcro state value associated with the alias.
+`(uism/run env plugin-name)`:: Runs the given plugin (passing it all of the aliased data from
+current Fulcro state) and returns the value from the plugin.
+`(uism/activate env state-name)`:: Returns a new env with `state-name` as the new active state.
+`(uism/exit env)`:: Returns a new env that will end the state machine (and GC it's instance from
+Fulcro state) after the results of the handler are processed.
+
+There are numerous other helpers, but these suffice to build pretty powerful state machines.
+
+Here's a complete example for handling fairly complete login logic:
+
+```
+(uism/defstatemachine login-machine
+  {::uism/actor-names #{:dialog :form}
+   ::uism/aliases     {:visible?       [:dialog :ui/active?]
+                       :login-enabled? [:form :ui/login-enabled?]
+                       :busy?          [:form :ui/busy?]
+                       :error          [:form :ui/login-error]
+                       :username       [:form :user/email]
+                       :password       [:form :user/password]}
+   ::uism/plugins     {:valid-credentials? (fn [{:keys [username password]}]
+                                             (and (seq username) (seq password)))}
+   ::uism/states      {:initial
+                       ;; Remember, this one triggers on initial SM start. It does *not*
+                       ;; have to transition to a new state, but often you will want
+                       ;; to for clarity.
+                       {::uism/handler (fn [env]
+                                         (-> env
+                                           (uism/set-aliased-value :visible? true)
+                                           (uism/set-aliased-value :login-enabled? false)
+                                           (uism/set-aliased-value :username "")
+                                           (uism/set-aliased-value :password "")
+                                           (uism/activate :filling-info)))}
+
+                       ;; Remain in this state while they are filling out the fields
+                       ;; Changes to state that are triggered through the UI can cause
+                       ;; events here, which can then control things like the
+                       ;; ability to "submit" and whether or not a "busy" spinner is being
+                       ;; shown.
+                       :filling-info
+                       {::uism/handler
+                        (fn [{::uism/keys [event-id] :as env}]
+                          (let [valid?   (uism/run env :valid-credentials?)
+                                enabled? (uism/alias-value env :login-enabled?)]
+                            (cond-> env
+                              (not= valid? enabled?)
+                              (uism/set-aliased-value :login-enabled? valid?)
+
+                              (and valid? (= event-id :login!))
+                              (->
+                                (uism/set-aliased-value :login-enabled? false)
+                                (uism/set-aliased-value :error "")
+                                (uism/set-aliased-value :busy? true)
+                                (uism/activate :attempting-login)))))}
+
+                       ;; This state will only be active while the server is busy. We'll
+                       ;; use Incubator's `pmutate` to easily tie together the results of
+                       ;; login with an "event" sent here.
+                       :attempting-login
+                       {::uism/handler (fn [{::uism/keys [event-id event-data] :as env}]
+                                         (log/info "Attempting login: " event-id)
+                                         (case event-id
+                                           :success (-> env
+                                                      (uism/set-aliased-value :busy? false)
+                                                      (uism/set-aliased-value :visible? false)
+                                                      (uism/exit))
+                                           :failure (-> env
+                                                      (uism/set-aliased-value :error "Invalid credentials. Please try again.")
+                                                      (uism/set-aliased-value :busy? false)
+                                                      (uism/activate :filling-info))
+                                           env))}}})
+```
+
+== Using State Machines from the UI
+
+The next step, of course, is hooking this state machine up so it can control your UI (which really
+just means your app state).
+
+=== Starting An Instance
+
+The first thing you need to do is create an instance and start it:
+
+`(uism/begin! component machine-def instance-id actor-map)`:: Installs an instance of a state
+machine (to be known as `instance-id`), based on the definition in `machine-def`, into
+Fulcro's state and sends the `::uism/started` event. The `actor-map` is a map from state
+machine actor names to idents of components.
+
+For example, to start the above state machine with an instance ID of `::loginsm`:
+
+```
+(uism/begin! this login-machine ::loginsm {:dialog (prim/get-ident Dialog {})
+                                           :form   (prim/get-ident LoginForm {})})
+```
+
+=== Triggering Events
+
+Now that you have a state machine running it is ready to receive events.  It will have already
+run the initial state handler once, which means it will have already set up the state in such
+a way that it is possible for your UI to look correct.  For example, in our login case the initial
+state shows the dialog, clears the input fields, and makes sure the logins are disabled.
+
+Forms will commonly want to send a `::uism/value-changed` event to indicate that a value is changing.
+Because this is such a common operation, there are easy helpers for it. For example, to
+update a string:
+
+`(uism/set-string! component state-machine-id data-alias event-or-string)`:: Puts a string into
+the given data alias (you can pass a string or a DOM onChange event).
+
+You can define other "custom" events to stand for whatever you want (and they can include
+aux data that you can pass along to the handlers).  To trigger any kind of event use:
+
+`(uism/trigger! comp-or-reconciler state-machine-id event)`:: Trigger an arbitrary event on the given
+state machine.
+
+For example:
+
+```
+(uism/trigger! reconciler ::loginsm :failure)
+```
+
+would send a (user-defined) `:failure` event.  Event data is just a map that can be passed as an
+additional parameter:
+
+```
+(uism/trigger! reconciler ::loginsm :failure {:message "Server is down. Try in 15 minutes."})
+```
+
+== Full Example
+
+This combination of feature leads to very clean UI code.  The above state machine can drive
+complete (and complex) behaviors for a variety of login components (full-screen, corner pop-up, etc.).
+
+Here's a complete UI that works with the above state machine:
+
+```
+;; This is the ONLY Fulcro mutation!  Simply send state machine events.
+(defmutation login [_]
+  (action [{:keys [reconciler]}]
+    (uism/trigger! reconciler ::loginsm :login!))
+  (ok-action [{:keys [reconciler]}]
+    (uism/trigger! reconciler ::loginsm :success))
+  (error-action [{:keys [reconciler]}]
+    (uism/trigger! reconciler ::loginsm :failure))
+  (remote [env] (pm/pessimistic-mutation env)))
+(mi/declare-mutation login `login)
+
+;; A simple wrapper function that invokes the mutation and morphs the parameters from
+;; UI props
+;; (for example, if the server expected that parameters to be named differently)
+(defn login! [this {:keys [user/email user/password]}]
+  (let []
+    (pm/pmutate! this `login {:username email :password password})))
+
+;; Notice how purely declarative these UI components are. There's not even logic
+;; around the "login!" event, since the state machine will "do the right thing" if that
+;; event arrives for the "wrong" state.
+(defsc LoginForm [this {:keys [ui/login-enabled? ui/login-error ui/busy? user/email user/password] :as props}]
+  {:query         [:ui/login-enabled? :ui/login-error :ui/busy? :user/email :user/password]
+   :ident         (fn [] [:COMPONENT/by-id ::login])
+   :initial-state {:user/email "" :user/password ""}}
+  (let [error?        (seq login-error)
+        error-classes [(when error? "error")]]
+    (dom/div :.ui.container.form {:classes (into error-classes [(when busy? "loading")])}
+      (dom/div :.field {:classes error-classes}
+        (dom/label "Email")
+        (dom/input {:value     email
+                    :onKeyDown (fn [evt] (when (evt/enter? evt) (login! this props)))
+                    :onChange  (fn [evt] (uism/set-string! this ::loginsm :username evt))}))
+      (dom/div :.field {:classes error-classes}
+        (dom/label "Password")
+        (dom/input {:value     password
+                    :onKeyDown (fn [evt]
+                                 (when (evt/enter? evt) (login! this props)))
+                    :onChange  (fn [evt] (uism/set-string! this ::loginsm :password evt))}))
+      (dom/div :.field
+        (dom/button {:disabled (not login-enabled?)
+                     :onClick  (fn [] (login! this props))}
+          "Login"))
+      (when error?
+        (dom/div :.ui.error.message
+          (dom/p login-error))))))
+
+(def ui-login-form (prim/factory LoginForm {:keyfn :db/id}))
+
+(defsc Dialog [_ {:keys [ui/active? dialog/form]}]
+  {:query         [:ui/active? {:dialog/form (prim/get-query LoginForm)}]
+   :ident         (fn [] [:COMPONENT/by-id ::dialog])
+   :initial-state {:ui/active? false :dialog/form {}}}
+  (sui/ui-modal {:open active?}
+    (sui/ui-modal-header {} "Login")
+    (sui/ui-modal-content {}
+      (ui-login-form form))))
+
+(def ui-dialog (prim/factory Dialog {:keyfn :ui/active?}))
+
+;; A simple demo root...need something to "start" the state machine
+(defsc Root [this {:keys [root/dialog]}]
+  {:query         [{:root/dialog (prim/get-query Dialog)}]
+   :initial-state {:root/dialog {}}}
+  (dom/div nil
+    (dom/button
+      {:onClick (fn []
+                  (uism/begin! this login-machine ::loginsm {:dialog (prim/get-ident Dialog {})
+                                                             :form   (prim/get-ident LoginForm {})}))}
+      "Start state machine")
+    (ui-dialog dialog)))
+```
