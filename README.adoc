@@ -17,6 +17,16 @@ So, if you see something in here that you want to use: please feel free to do so
 it proves unpopular and you have to adopt some of it into your source base later, but that's better
 than having to write it from scratch, right?
 
+== State Machines
+
+I've been wanting to add state machine stuff to Fulcro for some time.  I've finally done it, and I wish I'd done
+it years ago.  I've rewritten just a couple of things with it so far, and the results are so nice I can't wait
+to promote this thing out to Fulcro or its own library.
+
+For now it is here, and the documentation is in https://github.com/fulcrologic/fulcro-incubator/blob/develop/state-machine-docs.adoc[state-machine-docs.adoc]
+
+Try them for your login form, and I bet you'll suddenly want to use them everywhere!
+
 == DB Helpers
 
 The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/db_helpers.cljc[`fulcro.incubator.db-helpers`]
