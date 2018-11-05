@@ -30,9 +30,6 @@ ifdef::env-github[]
 toc::[]
 endif::[]
 
-WARNING: WORK IN PROGRESS. This is not in a formal release of incubator, and the API could still
-change (though doubtful it would change much).
-
 User interfaces are full of interactions that beg for the help of state machines. Just a simple
 login form is usually quite difficult to code (independent of tools) because
 its behavior depends on a number of factors...factors that are actually quite easy to represent
