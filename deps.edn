@@ -1,5 +1,7 @@
 {:paths   ["src/main" "src/test"]
 
+ :deps    {gnl/ghostwheel {:mvn/version "0.2.3"}}
+
  :aliases {:provided
                 {:extra-deps {org.clojure/clojure    {:mvn/version "1.9.0"}
                               thheller/shadow-cljs   {:mvn/version "2.6.23"}
@@ -8,7 +10,8 @@
 
            :dev {:extra-paths ["src/workspaces"]
 
-                 :extra-deps  {fulcrologic/fulcro-inspect {:mvn/version "2.2.4"}
-                               binaryage/devtools         {:mvn/version "0.9.10"}
-                               nubank/workspaces          {:mvn/version "1.0.0-preview9"}
-                               fulcrologic/fulcro-spec    {:mvn/version "2.1.2"}}}}}
+                 :extra-deps  {fulcrologic/fulcro-inspect             {:mvn/version "2.2.4"}
+                               fulcrologic/semantic-ui-react-wrappers {:mvn/version "2.0.3"}
+                               binaryage/devtools                     {:mvn/version "0.9.10"}
+                               nubank/workspaces                      {:mvn/version "1.0.0-preview9"}
+                               fulcrologic/fulcro-spec                {:mvn/version "2.1.2"}}}}}

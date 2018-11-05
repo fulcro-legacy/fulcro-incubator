@@ -13,6 +13,7 @@
     "karma-chrome-launcher": "^2.2.0",
     "karma-cljs-test": "^0.1.0",
     "karma-firefox-launcher": "^0.1.7",
+    "semantic-ui-react": "^0.83.0",
     "react": "^16.4.1",
     "react-dom": "^16.4.1",
     "react-grid-layout": "^0.16.6",
