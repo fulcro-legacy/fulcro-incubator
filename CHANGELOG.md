@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.12
+------
+- Adde UI State Machines.
+
 0.0.11-1
 --------
 - Removed stray console.log 
