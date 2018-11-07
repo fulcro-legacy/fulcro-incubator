@@ -15,6 +15,9 @@
     [fulcro.client.data-fetch :as df]
     [clojure.set :as set]))
 
+(s/def ::returning ::fp/component-class)
+(s/def ::target ::df/target)
+
 (def error-states #{:api-error :network-error})
 
 (defn pessimistic-mutation

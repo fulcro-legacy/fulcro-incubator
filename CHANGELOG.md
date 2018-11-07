@@ -1,8 +1,12 @@
 # Change Log
 
+0.0.13
+------
+- Added remote support to state machines
+
 0.0.12
 ------
-- Adde UI State Machines.
+- Added UI State Machines.
 
 0.0.11-1
 --------
