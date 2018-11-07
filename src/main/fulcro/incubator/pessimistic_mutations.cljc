@@ -89,8 +89,6 @@
   ([env k p]
    (call-mutation-action :action env k p)))
 
-(s/def ::mutation-response (s/keys))
-
 (mutations/defmutation mutation-network-error
   "INTERNAL USE mutation."
   [{:keys  [error params]
