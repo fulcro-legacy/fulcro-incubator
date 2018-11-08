@@ -20,6 +20,10 @@
 ;; Sample REUSABLE Machine Definition
 ;; ================================================================================
 
+(defsc Session [_ _]
+  {:query [:username :logged-in?]
+   :ident (fn [] [:globals ::session])})
+
 (uism/defstatemachine login-machine
   {::uism/actor-names #{:dialog :form}
    ;; Every fulcro state value that is used by plugins MUST have an alias.
@@ -38,6 +42,7 @@
                        {::uism/handler (fn [env]
                                          (log/info "Initial state.")
                                          (-> env
+                                           (uism/load ::session Session {::uism/post-event :session-checked})
                                            (uism/set-aliased-value :visible? true)
                                            (uism/set-aliased-value :login-enabled? false)
                                            (uism/set-aliased-value :username "")
@@ -46,19 +51,28 @@
 
                        :filling-info
                        {::uism/handler
-                        (fn [{::uism/keys [event-id] :as env}]
+                        (fn [{::uism/keys [event-id event-data] :as env}]
                           (log/info "Filling info: " event-id)
-                          (let [valid?   (uism/run env :valid-credentials?)
-                                enabled? (uism/alias-value env :login-enabled?)]
+                          (let [valid?     (uism/run env :valid-credentials?)
+                                logged-in? (some-> env ::uism/state-map :globals ::session :logged-in?)
+                                enabled?   (uism/alias-value env :login-enabled?)]
                             (cond-> env
                               (not= valid? enabled?)
                               (uism/set-aliased-value :login-enabled? valid?)
+
+                              (and (= event-id :session-checked) logged-in?)
+                              (-> (uism/set-aliased-value :visible? false))
 
                               (and valid? (= event-id :login!))
                               (->
                                 (uism/set-aliased-value :login-enabled? false)
                                 (uism/set-aliased-value :error "")
                                 (uism/set-aliased-value :busy? true)
+                                (uism/trigger-remote-mutation :form `login (merge event-data
+                                                                             {::uism/ok-event    :success
+                                                                              ::uism/error-event :failure
+                                                                              ::pm/returning     Session
+                                                                              ::pm/target        [::session]}))
                                 (uism/activate :attempting-login)))))}
 
                        :attempting-login
@@ -75,43 +89,28 @@
                                                       (uism/activate :filling-info))
                                            env))}}})
 
-;; You COULD make a new (derived) state machine def by deep-merging against the above..mainly to
-;; override the meaning of aliases. Not necessary in this case.
-(defmutation login [_]
-  (action [{:keys [reconciler]}]
-    (uism/trigger! reconciler ::loginsm :login!))
-  (ok-action [{:keys [reconciler]}]
-    (uism/trigger! reconciler ::loginsm :success))
-  (error-action [{:keys [reconciler]}]
-    (uism/trigger! reconciler ::loginsm :failure))
-  (remote [env] (pm/pessimistic-mutation env)))
-(mi/declare-mutation login `login)
-
-(defn login! [this {:keys [user/email user/password]}]
-  (let []
-    (pm/pmutate! this `login {:username email :password password})))
-
 (defsc LoginForm [this {:keys [ui/login-enabled? ui/login-error ui/busy? user/email user/password] :as props}]
   {:query         [:ui/login-enabled? :ui/login-error :ui/busy? :user/email :user/password]
    :ident         (fn [] [:COMPONENT/by-id ::login])
    :initial-state {:user/email "" :user/password ""}}
   (let [error?        (seq login-error)
-        error-classes [(when error? "error")]]
+        error-classes [(when error? "error")]
+        login!        (fn [] (uism/trigger! this ::loginsm :login! {:username email :password password}))]
     (dom/div :.ui.container.form {:classes (into error-classes [(when busy? "loading")])}
       (dom/div :.field {:classes error-classes}
         (dom/label "Email")
         (dom/input {:value     email
-                    :onKeyDown (fn [evt] (when (evt/enter? evt) (login! this props)))
+                    :onKeyDown (fn [evt] (when (evt/enter? evt) (login!)))
                     :onChange  (fn [evt] (uism/set-string! this ::loginsm :username evt))}))
       (dom/div :.field {:classes error-classes}
         (dom/label "Password")
         (dom/input {:value     password
                     :onKeyDown (fn [evt]
-                                 (when (evt/enter? evt) (login! this props)))
+                                 (when (evt/enter? evt) (login!)))
                     :onChange  (fn [evt] (uism/set-string! this ::loginsm :password evt))}))
       (dom/div :.field
         (dom/button {:disabled (not login-enabled?)
-                     :onClick  (fn [] (login! this props))}
+                     :onClick  (fn [] (login!))}
           "Login"))
       (when error?
         (dom/div :.ui.error.message
@@ -141,10 +140,19 @@
       "Start state machine")
     (ui-dialog dialog)))
 
+(defonce server-session (atom {:logged-in? false}))
+
+(server/defquery-root ::session
+  (value [env params]
+    @server-session))
+
 (server/defmutation login [{:keys [username password]}]
   (action [_]
     (if (= username "tony")
-      {}
+      (do
+        (reset! server-session {:logged-in? true
+                                :username   "Tony"})
+        @server-session)
       {::pm/mutation-errors "No way man!"})))
 
 (ws/defcard state-machine-demo-card

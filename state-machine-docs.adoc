@@ -1,7 +1,7 @@
 = UI State Machines
 :author: Tony Kay
-:revdate: November 2, 2018
-:revnumber: 1
+:revdate: November 7, 2018
+:revnumber: 2
 :lang: en
 :encoding: UTF-8
 :doctype: book
@@ -301,6 +301,54 @@ additional parameter:
 ```
 (uism/trigger! reconciler ::loginsm :failure {:message "Server is down. Try in 15 minutes."})
 ```
+
+== Mutations and State Machines
+
+Functions are included to trigger *remote* mutations.  The state machine itself is
+already the optimistic side of a mutation, so really what we need is a way to trigger
+a remote (pessimistic) mutation and trigger events based on the outcome.
+
+The `trigger-remote-mutation` function does this. It takes:
+
+*  `env` - The SM handler environment
+*  `actor` - The name (keyword) of a defined actor.  The mutation will be run in the context of this actor's state
+            (see `pm/pmutate!`), which means that progress will be visible there. THERE MUST BE A MOUNTED COMPONENT
+            with this actor's name ON the UI, or the mutation will abort.
+*  `mutation` - The symbol (or mutation declaration) of the *server* mutation to run. This function will *not* run a local
+   version of the mutation.
+*  `options-and-params` - The parameters to pass to your mutation. This map can *also* include these additional
+options:
+
+`::pm/returning Class` :: Option of pmutate to supply a component form normalizing the returned result.
+`::pm/target explicit-target` :: Option of pmutate for targeting retuned result.
+`::uism/target-actor actor` :: Helper that can translate an actor name to a target, if returning a result.
+`::uism/target-alias field-alias` :: Helper that can translate a data alias to a target (ident + field).
+`::uism/ok-event event-id` :: The SM event to trigger when the pessimistic mutation succeeds (no default).
+`::uism/error-event event-id` :: The SM event to trigger when the pessimistic mutation fails (no default).
+`::uism/ok-data map-of-data` :: Data to include in the event-data on an ok event
+`::uism/error-data map-of-data` :: Data to include in the event-data on an error event
+`::uism/mutation-remote` :: The keyword name of the Fulcro remote (defaults to :remote)
+
+The pessimistic mutation response *will be merged* into the event data that is sent to the SM handler,
+which means the `ok-event` and `error-event` handlers can simply look in event-data for
+the data sent back from the server.
+
+This function does *not* side effect.  It queues the mutation to run after the handler exits."
+
+== Loads and State Machines
+
+The API includes these functions for doing loads in the context of a running state
+machine:
+
+`(load env k component params)`:: Just like Fulcro's load, but takes a SM env.
+`(load-actor env actor-name params)`:: (Re)load the given actor.
+
+The `params` of these functions can include these special values:
+
+`:fulcro.client.primitives/component-class`:: A component class.  Only used on `load-actor`, and
+only if the actor isn't on-screen.
+`::uism/post-event`:: An event to send when the load is done (instead of calling a mutation)
+`::uism/post-event-params`:: Extra parameters to send as event-data on the post-event.
 
 == Full Example
 
