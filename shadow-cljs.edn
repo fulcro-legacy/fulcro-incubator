@@ -1,5 +1,5 @@
 ;; shadow-cljs configuration
-{:deps   {:aliases [:provided :dev]}
+{:deps   {:aliases [:provided :dev :test]}
  :nrepl  {:port 9845}
 
  :builds {:workspaces {:target           :browser
@@ -21,6 +21,8 @@
                        :devtools         {:http-port 8021
                                           :http-root "resources/public/js/test"}}
 
-          :ci         {:target    :karma
-                       :ns-regexp ".*-test$"
-                       :output-to "target/ci.js"}}}
+          :ci         {:target           :karma
+                       :js-options       {:js-provider :shadow}
+                       :compiler-options {:static-fns false} ; required for mocking to work
+                       :output-to        "target/ci.js"
+                       :ns-regexp        "-test$"}}}
