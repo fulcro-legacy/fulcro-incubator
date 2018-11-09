@@ -1,5 +1,11 @@
 # Change Log
 
+0.0.15
+------
+- Finished state machine support for: remotes, aborting network
+requests, state timeout events, and improved docs.
+- Upgraded example to use timeouts, aborts, etc.
+
 0.0.14
 ------
 - Got rid of ghostwheel dependency madness
