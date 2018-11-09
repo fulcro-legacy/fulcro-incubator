@@ -10,12 +10,25 @@
     [fulcro.client.mutations :as m :refer [defmutation]]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.incubator.mutation-interface :as mi]
-    [fulcro.incubator.spec-helpers :refer [Defn =>]]
+    [fulcro.incubator.spec-helpers :refer [Defn Defn- =>]]
     [fulcro.incubator.pessimistic-mutations :as pm]
     [fulcro.util :as futil]
     [taoensso.timbre :as log]))
 
 (mi/declare-mutation mutation-delegate `mutation-delegate)
+
+(defn defer
+  "No effect in CLJ. In CLJS, defer calling `f` until the current UI thread is released (setTimeout 0)."
+  [f]
+  #?(:cljs (js/setTimeout f 0)
+     :clj  (f)))
+
+(defn set-js-timeout! [f tm]
+  #?(:clj  (f)
+     :cljs (js/setTimeout f tm)))
+
+(defn clear-js-timeout! [timer]
+  #?(:cljs (js/clearTimeout timer)))
 
 ;; Active State Machine and ENV specs
 (s/def ::state-map map?)
@@ -29,26 +42,43 @@
 (s/def ::state-machine-id (s/with-gen symbol? #(s/gen #{'the-state-machine}))) ; The symbol of the state machine's definition
 (s/def ::asm-id any?)                                       ; The ID of the active instance in fulcro state
 (s/def ::local-storage (s/map-of keyword? any?))
-;; aliases and plugins are copied from the definition
-(s/def ::asm (s/keys :req [::asm-id ::state-machine-id ::active-state ::actor->ident ::ident->actor]
-               :opt [::local-storage]))
+(s/def ::timeout pos-int?)
+(s/def ::timer-id (s/with-gen any? #(s/gen #{:timer-1 42})))
+(s/def ::cancel-fn (s/with-gen fn? #(s/gen #{#{:event! :other!}})))
+(s/def ::cancel-on (s/with-gen #(-> % meta :cancel-on fn?) #(s/gen #{(with-meta {} {:cancel-on (fn [e] true)})})))
+(s/def ::js-timer (s/with-gen #(-> % meta :timer boolean) #(s/gen #{(with-meta {} {:timer {}})})))
+(s/def ::timeout-descriptor (s/keys :req [::js-timer ::timeout ::event-id ::timer-id ::cancel-on] :opt [::event-data]))
+(s/def ::queued-timeouts (s/coll-of ::timeout-descriptor))
+(s/def ::active-timers (s/map-of ::timer-id ::timeout-descriptor))
+(s/def ::asm (s/keys :req [::asm-id ::state-machine-id ::active-state ::actor->ident
+                           ::ident->actor ::active-timers ::local-storage]))
 (s/def ::state-id keyword?)
 (s/def ::event-data map?)
 (s/def ::event-id keyword?)
 (s/def ::env (s/keys :req [::state-map ::asm-id]
-               :opt [::source-actor-ident ::event-id ::event-data ::queued-mutations]))
+               :opt [::source-actor-ident ::event-id ::event-data
+                     ::queued-mutations ::queued-loads ::queued-timeouts]))
 
 (Defn fake-handler [env] [::env => ::env] env)
 ;; State Machine Definition Specs
 (s/def ::actor-names (s/coll-of ::actor-name :kind set?))
-(s/def ::handler (s/with-gen any? #(s/gen #{fake-handler})))
-(s/def ::state (s/with-gen (s/keys :req [::handler]) #(s/gen #{{::handler fake-handler}})))
-(s/def ::states (s/with-gen (s/map-of keyword? ::state) #(s/gen #{{:initial {::handler fake-handler}}})))
+(s/def ::event-predicate (s/with-gen fn? #(s/gen #{(fn [_] false) (fn [_] true)})))
+(s/def ::handler (s/with-gen fn? #(s/gen #{fake-handler})))
+(s/def ::target-state ::state-id)
+(s/def ::event-processing (s/keys :opt [::handler ::event-predicate ::target-state]))
+(s/def ::events (s/map-of ::event-id ::event-processing))
+(s/def ::state (s/with-gen
+                 (s/or
+                   :handler (s/keys :req [::handler])
+                   :events (s/keys :req [::events]))
+                 #(s/gen #{{::handler fake-handler}})))
+(s/def ::states (s/with-gen (s/map-of ::state-id ::state) #(s/gen #{{:initial {::handler fake-handler}}})))
 (s/def ::alias keyword?)
 (s/def ::aliases (s/map-of ::alias (s/tuple ::actor-name keyword?)))
 (s/def ::plugin (s/with-gen any? #(s/gen #{(fn [aliases] nil)})))
 (s/def ::plugins (s/map-of keyword? ::plugin))
 (s/def ::event-names (s/coll-of keyword? :kind set?))
+(s/def ::target-state keyword?)
 (s/def ::state-machine-definition (s/with-gen
                                     (s/keys :req [::actor-names ::states] :opt [::aliases ::plugins ::event-names])
                                     #(s/gen #{{::actor-names #{:a}
@@ -86,6 +116,18 @@
 ;; Active State Machine API
 ;; ================================================================================
 
+(mi/declare-mutation trigger-state-machine-event `trigger-state-machine-event)
+
+(defn trigger!
+  "Trigger an event on an active state machine. Safe to use in mutation bodies."
+  ([this active-state-machine-id event-id] (trigger! this active-state-machine-id event-id {}))
+  ([this active-state-machine-id event-id extra-data]
+   (defer
+     #(prim/transact! this [(trigger-state-machine-event {::asm-id     active-state-machine-id
+                                                          ::event-id   event-id
+                                                          ::event-data extra-data})]))))
+
+
 (Defn new-asm
   "Create the runtime state for the given state machine in it's initial state.
 
@@ -104,6 +146,7 @@
      ::active-state     :initial
      ::ident->actor     i->a
      ::actor->ident     actor->ident
+     ::active-timers    {}
      ::local-storage    {}}))
 
 (Defn asm-path
@@ -134,7 +177,8 @@
   [env state-id]
   [::env ::state-id => ::env]
   (if (valid-state? env state-id)
-    (assoc-in env (asm-path env ::active-state) state-id)
+    (do (log/debug "Activating " state-id)
+        (assoc-in env (asm-path env ::active-state) state-id))
     (do
       (log/error "Activate called for invalid state: " state-id)
       env)))
@@ -215,13 +259,21 @@
       nil)))
 
 (Defn set-aliased-value
-  [env alias new-value]
-  [::env ::alias any? => ::env]
-  (if-let [real-path (resolve-alias env alias)]
-    (update env ::state-map assoc-in real-path new-value)
-    (do
-      (log/error "Attempt to set a value on an invalid alias:" alias)
-      env)))
+  ([env alias new-value alias-2 value-2 & kv-pairs]
+   [::env ::alias any? ::alias any? (s/* any?) => ::env]
+   (let [kvs (into [[alias new-value] [alias-2 value-2]] (partition 2 kv-pairs))]
+     (reduce
+       (fn [e [k v]]
+         (set-aliased-value e k v))
+       env
+       kvs)))
+  ([env alias new-value]
+   [::env ::alias any? => ::env]
+   (if-let [real-path (resolve-alias env alias)]
+     (update env ::state-map assoc-in real-path new-value)
+     (do
+       (log/error "Attempt to set a value on an invalid alias:" alias)
+       env))))
 
 (Defn aliased-data
   "Extracts aliased data from Fulcro state to construct arguments. If explicit-args is supplied,
@@ -276,56 +328,223 @@
     (seq event-data) (assoc ::event-data event-data)
     ref (assoc ::source-actor-ident ref)))
 
-(defn- defer [f]
-  #?(:cljs (js/setTimeout f 0)
-     :clj  (f)))
+(Defn with-actor-class
+  "Associate a given component UI Fulcro class with an ident.  This is used with `begin!` in your actor map if the
+  actor in question is going to be used with loads or mutations that return a value of that type. The actor's class
+  can be retrieved for use in a handler using `(uism/actor-class env)`.
+
+  ```
+  (begin! ... {:person (uism/with-actor-class [:person/by-id 1] Person)})
+  ```
+  "
+  [ident class]
+  [::fulcro-ident ::prim/component-class => ::fulcro-ident]
+  (vary-meta ident assoc ::class class))
+
+(Defn actor-class [env actor-name]
+  [::env ::actor-name => (s/nilable ::prim/component-class)]
+  (let [actor->ident (asm-value env ::actor->ident)
+        cls          (-> actor-name actor->ident meta ::class)]
+    cls))
+
+(Defn queue-mutations!
+  [reconciler env]
+  [::fulcro-reconciler ::env => nil?]
+  (let [queued-mutations (::queued-mutations env)]
+    (doseq [{::keys [mutation-context] :as mutation-params} queued-mutations]
+      (let [contextual-component (prim/ref->any reconciler (actor->ident env mutation-context))]
+        (if (nil? contextual-component)
+          (log/error "Cannot run mutation. No contextual component mounted for " mutation-context)
+          (pm/pmutate! contextual-component mutation-delegate mutation-params))))
+    nil))
+
+(Defn queue-actor-load!
+  "Internal implementation. Queue a load of an actor."
+  [reconciler env actor-name component-class load-options]
+  [::fulcro-reconciler ::env ::actor-name (s/nilable ::prim/component-class) ::load-options => nil?]
+  (let [actor-ident (actor->ident env actor-name)
+        cls         (or component-class (actor-class env actor-name) (prim/react-type (prim/ref->any reconciler actor-ident)))]
+    (if (nil? cls)
+      (log/error "Cannot run load. Counld not derive Fulcro class (and none was configured) for " actor-name)
+      (defer #(df/load reconciler actor-ident cls load-options)))
+    nil))
+
+(Defn queue-normal-load!
+  "Internal implementation. Queue a load."
+  [reconciler query-key component-class load-options]
+  [::fulcro-reconciler (s/nilable keyword?) (s/nilable ::prim/component-class) ::load-options => nil?]
+  (if (and (nil? query-key) (nil? component-class))         ; regular-style load
+    (log/error "Cannot run load. Either query-key or component-class is required.")
+    (defer #(df/load reconciler query-key component-class load-options)))
+  nil)
+
+(Defn queue-loads! [reconciler env]
+  [::fulcro-reconciler ::env => nil?]
+  (let [queued-loads (::queued-loads env)]
+    (doseq [{::prim/keys [component-class]
+             ::keys      [actor-name query-key load-options] :as load-params} queued-loads]
+      (if actor-name                                        ; actor-centric load
+        (queue-actor-load! reconciler env actor-name component-class load-options)
+        (queue-normal-load! reconciler query-key component-class load-options))))
+  nil)
+
+(Defn update-fulcro-state!
+  "Put the evolved state-map from an env into a (Fulcro) state-atom"
+  [{::keys [asm-id] :as env} state-atom]
+  [::env ::util/atom => nil?]
+  (let [next-state (when env (asm-value env ::active-state))]
+    (when-let [new-fulcro-state (some-> (::state-map env)
+                                  ;; GC state machine if it exited
+                                  (cond->
+                                    (= ::exit next-state) (update ::asm-id dissoc asm-id)))]
+      (reset! state-atom new-fulcro-state)))
+  nil)
+
+(Defn set-timeout
+  "Add a timeout named `timer-id` to the `env` that will send `event-id` with `event-data` event
+   after `timeout` (in milliseconds) unless an event (i.e. some-event-id) occurs where a call
+   to `(cancel-on-events some-event-id)` returns true.
+
+   Setting a timeout on an existing timer-id will cancel the current one and start the new one.
+
+   `cancel-on-events` is a predicate that will be passed an event ID on events. If it returns true
+    on an event before the timeout fires, then the timeout will be auto-cancelled. If not specified, then
+    it defaults to `(constantly false)`."
+  ([env timer-id event-id event-data timeout]
+   [::env ::timer-id ::event-id ::event-data pos-int? => ::env]
+   (set-timeout env timer-id event-id event-data timeout (constantly false)))
+  ([env timer-id event-id event-data timeout cancel-on-events]
+   [::env ::timer-id ::event-id ::event-data pos-int? ::cancel-fn => ::env]
+   (let [descriptor (cond-> {::timeout   timeout
+                             ::timer-id  timer-id
+                             ::js-timer  (with-meta {} {:timer true})
+                             ::event-id  event-id
+                             ::cancel-on (with-meta {} {:cancel-on cancel-on-events})}
+                      event-data (assoc ::event-data event-data))]
+     (update env ::queued-timeouts (fnil conj []) descriptor))))
+
+(Defn clear-timeout!
+  "Clear a scheduled timeout (if it has yet to fire).  Harmless to call if the timeout is gone. This call takes
+  effect immediately (in terms of making sure the timeout does not fire)."
+  [env timer-id]
+  [::env ::timer-id => ::env]
+  (let [{::keys [js-timer]} (asm-value env [::active-timers timer-id])
+        real-js-timer (-> js-timer meta :timer)]
+    (when real-js-timer
+      (log/debug "Clearing timeout on " timer-id)
+      (clear-js-timeout! real-js-timer))
+    (-> env
+      (update-in (asm-path env [::active-timers]) dissoc timer-id))))
+
+(Defn generic-event-handler
+  "Returns an event handler that can process events according to a state machine
+  ::uism/events definition of the current event/state in `env`.
+  If a definition cannot be found then it returns nil."
+  [original-env]
+  [::env => (s/nilable ::handler)]
+  (let [smdef            (lookup-state-machine original-env)
+        current-state-id (asm-value original-env ::active-state)
+        current-event    (::event-id original-env)
+        {::keys [event-predicate handler target-state] :as event-def} (some-> smdef ::states (get current-state-id) ::events (get current-event))]
+    (if event-def
+      (fn [env]
+        (if (or (nil? event-predicate) (and event-predicate (event-predicate env)))
+          (let [env                (if handler (or (handler env) env) env)
+                post-handler-state (-> env (asm-value ::active-state))
+                state-changed?     (not= post-handler-state current-state-id)]
+            (cond-> env
+              (and (not state-changed?) target-state) (activate target-state)))
+          ;; IMPORTANT: UNDO value changes if the predicate is disabled
+          (do
+            (log/debug "Undoing changes from value-changed")
+            original-env)))
+      nil)))
+
+(Defn active-state-handler
+  "Find the handler for the active state in the current env."
+  [env]
+  [::env => ::handler]
+  (let [smdef         (lookup-state-machine env)
+        current-state (asm-value env ::active-state)
+        handler       (or
+                        (get-in smdef [::states current-state ::handler])
+                        (generic-event-handler env))]
+    (if handler
+      handler
+      (do
+        (log/error "Did not find a handler for " current-state)
+        identity))))
+
+(defn- ui-refresh-list
+  "Returns a vector of things to refresh in Fulcro based on the final state of an active SM env."
+  [env]
+  (let [smdef        (lookup-state-machine env)
+        actor-idents (mapv #(actor->ident env %) (::actor-names smdef))]
+    actor-idents))
+
+(Defn- get-js-timer [env timer-id]
+  [::env ::timer-id => any?]
+  (some-> (asm-value env [::active-timers timer-id]) ::js-timer meta :timer))
+
+(Defn schedule-timeouts!
+  "INTERNAL: actually schedule the timers that were submitted during the event handler."
+  [reconciler env]
+  [::fulcro-reconciler ::env => ::env]
+  (let [{::keys [queued-timeouts asm-id]} env]
+    (reduce
+      (fn [env {::keys [timeout event-id event-data timer-id] :as descriptor}]
+        (let [current-timer (get-js-timer env timer-id)
+              js-timer      (set-js-timeout! (fn []
+                                               (log/debug "Sending " event-id "due to timeout of" timer-id "after" timeout "ms")
+                                               (trigger! reconciler asm-id event-id (or event-data {}))) timeout)
+              descriptor    (update-in descriptor [::js-timer] vary-meta assoc :timer js-timer)]
+          (log/debug "Scheduled timer" timer-id)
+          (when current-timer
+            (log/debug "Resetting active timer" timer-id)
+            (clear-js-timeout! current-timer))
+          (assoc-in env (asm-path env [::active-timers timer-id]) descriptor)))
+      env
+      queued-timeouts)))
+
+(Defn clear-timeouts-on-event!
+  "Processes the auto-cancel of events. This is a normal part of the internals, but can be used in handlers
+  to simulate a *different* event than acutally occured for the purpose of clearing sets of timers that
+  auto-cancel on other events than what occurred."
+  [env event-id]
+  [::env ::event-id => ::env]
+  (let [active-timers (asm-value env ::active-timers)]
+    (reduce
+      (fn [env timer-id]
+        (let [cancel-predicate (some-> (get-in active-timers [timer-id ::cancel-on]) meta :cancel-on)]
+          (when-not cancel-predicate
+            (log/error "INTERNAL ERROR: Cancel predicate was nil for timer " timer-id))
+          (if (and cancel-predicate (cancel-predicate event-id))
+            (clear-timeout! env timer-id)
+            env)))
+      env
+      (keys active-timers))))
 
 (defn trigger-state-machine-event!
-  "Low-level implementation of triggering a state machine event. Does no direct interaction with
-  Fulcro UI refresh.  Use `trigger!`.
+  "IMPLEMENTATION DETAIL. Low-level implementation of triggering a state machine event. Does no direct interaction with
+  Fulcro UI refresh.  Use `trigger!` instead.
 
   - `env` - A fulcro mutation env, containing at least the state atom and optionally the ref of the
     component that was the source of the event.
   - params - The parameters for the event
 
   Returns a vector of actor idents that should be refreshed. "
-  [{:keys [reconciler component state ref]} {::keys [event-id event-data asm-id] :as params}]
-  (let [sm-env           (state-machine-env @state ref asm-id event-id event-data)
-        smdef            (lookup-state-machine sm-env)
-        actor-idents     (mapv #(actor->ident sm-env %) (::actor-names smdef))
-        current-state    (asm-value sm-env ::active-state)
-        handler          (get-in smdef [::states current-state ::handler] identity)
-        final-env        (-> sm-env
-                           (apply-event-value params)
-                           (handler))
-        queued-mutations (::queued-mutations final-env)
-        queued-loads     (::queued-loads final-env)
-        next-state       (when final-env (asm-value final-env ::active-state))]
-    (when (seq queued-mutations)
-      (doseq [{::keys [mutation-context] :as mutation-params} queued-mutations]
-        (let [contextual-component (prim/ref->any reconciler (actor->ident sm-env mutation-context))]
-          (if (nil? contextual-component)
-            (log/error "Cannot run mutation. No contextual component mounted for " mutation-context)
-            (pm/pmutate! contextual-component mutation-delegate mutation-params)))))
-    (when (seq queued-loads)
-      (log/info "Queued Loads " queued-loads)
-      (doseq [{::prim/keys [component-class]
-               ::keys      [actor-name query-key load-options] :as load-params} queued-loads]
-        (if actor-name                                      ; actor-centric load
-          (let [actor-ident (actor->ident sm-env actor-name)
-                cls         (or component-class (prim/react-type (prim/ref->any reconciler actor-ident)))]
-            (if (nil? cls)
-              (log/error "Cannot run load. Counld not derive class (and none was passed) for " actor-name)
-              (defer #(df/load reconciler actor-ident cls load-options))))
-          (if (and (nil? query-key) (nil? component-class)) ; regular-style load
-            (log/error "Cannot run load. Either query-key or component-class is required.")
-            (defer #(df/load reconciler query-key component-class load-options))))))
-    (when-let [new-fulcro-state (some-> (::state-map final-env)
-                                  ;; GC state machine if it exited
-                                  (cond->
-                                    (= ::exit next-state) (update ::asm-id dissoc asm-id)))]
-      (reset! state new-fulcro-state))
-    actor-idents))
+  [{:keys [reconciler state ref]} {::keys [event-id event-data asm-id] :as params}]
+  (let [sm-env      (state-machine-env @state ref asm-id event-id event-data)
+        handler     (active-state-handler sm-env)
+        valued-env  (apply-event-value sm-env params)
+        handled-env (handler valued-env)
+        final-env   (as-> (or handled-env valued-env) e
+                      (clear-timeouts-on-event! e event-id)
+                      (schedule-timeouts! reconciler e))]
+    (queue-mutations! reconciler final-env)
+    (queue-loads! reconciler final-env)
+    (update-fulcro-state! final-env state)
+    (ui-refresh-list final-env)))
 
 (defmutation trigger-state-machine-event
   "Mutation: Trigger an event on an active state machine"
@@ -337,22 +556,16 @@
       (fcip/queue! reconciler to-refresh))
     true))
 
-(mi/declare-mutation trigger-state-machine-event `trigger-state-machine-event)
-
-(defn trigger!
-  "Trigger an event on an active state machine. Safe to use in mutation bodies."
-  ([this active-state-machine-id event-id] (trigger! this active-state-machine-id event-id {}))
-  ([this active-state-machine-id event-id extra-data]
-    #?(:cljs
-       (js/setTimeout
-         #(prim/transact! this [(trigger-state-machine-event {::asm-id     active-state-machine-id
-                                                              ::event-id   event-id
-                                                              ::event-data extra-data})])
-         0))))
-
 (defn set-string!
   "Similar to Fulcro's set-string, but it sets the string on an active state machine's data alias.
-  event-or-string can be a string or a React DOM onChange event."
+  event-or-string can be a string or a React DOM onChange event.
+
+  The incoming `event-data` to your handler will include `::uism/alias` and `:value` (if you care to do anything
+  with the value change event).
+
+  NOTE: Generates a ::uism/value-changed event. If you're state machine is implemented with the events
+  structure that allows an event-predicate, then this set will be ignored if the current state's event-predicate
+  returns false."
   [this active-state-machine-id alias event-or-string]
   (let [value (if (string? event-or-string)
                 event-or-string
@@ -360,17 +573,50 @@
     (trigger! this active-state-machine-id ::value-changed {::alias alias
                                                             :value  value})))
 
+(defn set-value!
+  "Similar to Fulcro's set-value, but it sets the raw value on an active state machine's data alias.
+
+  The incoming `event-data` to your handler will include `::uism/alias` and `:value` (if you care to do anything
+  with the value change event).
+
+  NOTE: Generates a ::uism/value-changed event. If you're state machine is implemented with the events
+  structure that allows an event-predicate, then this set will be ignored if the current state's event-predicate
+  returns false."
+  [this active-state-machine-id alias value]
+  (trigger! this active-state-machine-id ::value-changed {::alias alias
+                                                          :value  value}))
+
 (defmutation begin
   "Mutation to begin a state machine. Use `begin!` instead."
-  [{::keys [asm-id] :as params}]
+  [{::keys [asm-id event-data] :as params}]
   (action [{:keys [state] :as env}]
     (swap! state (fn [s]
                    (-> s
                      (assoc-in [::asm-id asm-id] (new-asm params)))))
-    (trigger-state-machine-event! env {::event-id   ::started
-                                       ::asm-id     asm-id
-                                       ::event-data {}})))
+    (trigger-state-machine-event! env (cond-> {::event-id   ::started
+                                               ::asm-id     asm-id
+                                               ::event-data {}}
+                                        event-data (assoc ::event-data event-data)))))
 (mi/declare-mutation begin `begin)
+
+(defn derive-actor-idents
+  "Generate an actor->ident map where the class of the actor is stored as metadata on each ident."
+  [actors]
+  (into {}
+    ;; v can be an ident, component, or component class
+    (keep (fn [[actor-id v]]
+            (cond
+              (and (prim/component? v) (-> (prim/get-ident v) second))
+              [actor-id (with-actor-class (prim/get-ident v) (prim/react-type v))]
+
+              (and (prim/component-class? v) (-> (prim/get-ident v {}) second))
+              [actor-id (with-actor-class (prim/get-ident v {}) v)]
+
+              (futil/ident? v) [actor-id v]
+              :otherwise (do
+                           (log/error "The value given for actor" actor-id "had (or was) an invalid ident:" v)
+                           nil))))
+    actors))
 
 (Defn begin!
   "Install and start a state machine.
@@ -378,10 +624,18 @@
   this - A UI component or reconciler
   machine - A state machine defined with defstatemachine
   instance-id - An ID by which you will refer to this active instance.
-  actors - A map of actor-names -> The idents of the real components that will represent them in the UI."
-  [this machine instance-id actors]
-  [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident => any?]
-  (prim/transact! this [(begin {::asm-id instance-id ::state-machine-id (::state-machine-id machine) ::actor->ident actors})]))
+  actors - A map of actor-names -> The ident, class, or react instance that represent them in the UI. Raw idents do not support SM loads.
+  started-event-data - Data that will be sent with the ::uism/started event as ::uism/event-data"
+  ([this machine instance-id actors]
+   [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident => any?]
+   (begin! this machine instance-id actors {}))
+  ([this machine instance-id actors started-event-data]
+   [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident ::event-data => any?]
+   (let [actors->idents (derive-actor-idents actors)]
+     (prim/transact! this [(begin {::asm-id           instance-id
+                                   ::state-machine-id (::state-machine-id machine)
+                                   ::event-data       started-event-data
+                                   ::actor->ident     actors->idents})]))))
 
 #?(:clj
    (defmacro defstatemachine [name body]
@@ -405,9 +659,9 @@
 (mi/declare-mutation spec-mutation `spec-mutation)
 (s/def ::mutation-decl (s/with-gen mi/mutation-declaration? #(s/gen #{spec-mutation})))
 (s/def ::mutation-context ::actor-name)
-(s/def ::mutation-descriptor (s/keys :req [::mutation-context]
+(s/def ::mutation-descriptor (s/keys :req [::mutation-context ::mutation]
                                :opt [::pm/target ::ok-event ::ok-data ::error-event ::error-data
-                                     ::pm/returning ::mutation ::mutation-remote]))
+                                     ::pm/returning ::mutation-remote]))
 (s/def ::mutation-remote keyword?)
 (s/def ::queued-mutations (s/coll-of ::mutation-descriptor))
 
@@ -439,12 +693,10 @@
 (let [mtrigger! (fn mutation-trigger* [{:keys [reconciler state]} actor-ident asm-id event data]
                   (let [response   (get-in @state (conj actor-ident ::pm/mutation-response))
                         event-data (merge {} data response)]
-                    #?(:cljs
-                       (js/setTimeout
-                         #(prim/transact! reconciler actor-ident [(trigger-state-machine-event {::asm-id     asm-id
-                                                                                                ::event-id   event
-                                                                                                ::event-data event-data})])
-                         0))))]
+                    (defer
+                      #(prim/transact! reconciler actor-ident [(trigger-state-machine-event {::asm-id     asm-id
+                                                                                             ::event-id   event
+                                                                                             ::event-data event-data})]))))]
   (defmethod m/mutate `mutation-delegate [{:keys [reconciler state] :as env} _
                                           {::keys [asm-id ok-event error-event mutation
                                                    mutation-context ok-data error-data mutation-remote] :as mp}]
@@ -453,14 +705,17 @@
       {(or mutation-remote :remote) (pm/pessimistic-mutation env)}
       (let [sm-env      (state-machine-env @state nil asm-id ok-event ok-data)
             actor-ident (actor->ident sm-env mutation-context)
+            abort-id    (:abort-id mp)
             fixed-env   (-> env
                           (assoc :ref actor-ident)
+                          (cond-> abort-id (update :ast m/with-abort-id abort-id))
                           (update :ast assoc
                             :key mutation
                             :dispatch-key mutation
                             :params (dissoc mp ::ok-event ::error-event ::mutation
                                       ::mutation-context ::ok-data ::error-data
                                       ::mutation-remote ::asm-id)))]
+        (log/debug "explcit remote is " mutation-remote)
         (cond-> {(or mutation-remote :remote) (pm/pessimistic-mutation fixed-env)}
           ok-event (assoc :ok-action (fn [] (mtrigger! fixed-env actor-ident asm-id ok-event ok-data)))
           error-event (assoc :error-action (fn [] (mtrigger! fixed-env actor-ident asm-id error-event error-data))))))))
@@ -518,7 +773,10 @@
 
 (Defn load
   "Identical API to fulcro's data fetch `load`, but using a handle `env` instead of a component/reconciler.
-   Adds the load request to then env which will be sent to Fulcro as soon as the handler finishes."
+   Adds the load request to then env which will be sent to Fulcro as soon as the handler finishes.
+
+   NOTE: In general a state machine should declare an actor for items in the machine and use `load-actor` instead of
+   this function so that the state definitions themselves need not be coupled (via code) to the UI."
   ([env k component-class]
    [::env keyword? ::prim/component-class => ::env]
    (load env k component-class {}))
@@ -526,13 +784,14 @@
    [::env keyword? ::prim/component-class ::load-options => ::env]
    (let [{::keys [post-event post-event-params]} options
          {::keys [asm-id]} env
-         options (cond-> options
-                   post-event (assoc :post-mutation `trigger-state-machine-event
-                                     :post-mutation-params (merge post-event-params
-                                                             {::asm-id     asm-id
-                                                              ::event-id   post-event
-                                                              ::event-data post-event-params}))
-                   :and (dissoc ::post-event ::post-event-params))]
+         options (-> (dissoc options ::post-event ::post-event-params)
+                   (assoc :abort-id asm-id)
+                   (cond->
+                     post-event (assoc :post-mutation `trigger-state-machine-event
+                                       :post-mutation-params (merge post-event-params
+                                                               {::asm-id     asm-id
+                                                                ::event-id   post-event
+                                                                ::event-data post-event-params}))))]
      (update env ::queued-loads (fnil conj []) (cond-> {}
                                                  component-class (assoc ::prim/component-class component-class)
                                                  k (assoc ::query-key k)
@@ -545,7 +804,7 @@
    options can contain the normal `df/load` parameters, and also:
 
    `::prim/component-class` - The defsc name of the component to use for normalization and query. Only needed if the
-     actor is not yet on-screen.
+     actor was not declared using a Fulcro component or component class.
 
    Adds a load request to then env which will be sent to Fulcro as soon as the handler finishes."
   ([env actor-name]
