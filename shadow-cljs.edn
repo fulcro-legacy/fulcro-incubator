@@ -1,5 +1,5 @@
 ;; shadow-cljs configuration
-{:deps   {:aliases [:provided :dev]}
+{:deps   {:aliases [:provided :dev :test]}
  :nrepl  {:port 9845}
 
  :builds {:workspaces {:target           :browser
@@ -14,6 +14,15 @@
                                           :http-resource-root "."}
                        :modules          {:main {:entries [fulcro.incubator.workspaces.main]}}}
 
-          :ci         {:target    :karma
-                       :ns-regexp "-ws$"
-                       :output-to "target/ci.js"}}}
+          :test       {:target           :browser-test
+                       :test-dir         "resources/public/js/test"
+                       :ns-regexp        "test$"
+                       :compiler-options {:static-fns false}
+                       :devtools         {:http-port 8021
+                                          :http-root "resources/public/js/test"}}
+
+          :ci         {:target           :karma
+                       :js-options       {:js-provider :shadow}
+                       :compiler-options {:static-fns false} ; required for mocking to work
+                       :output-to        "target/ci.js"
+                       :ns-regexp        "-test$"}}}
