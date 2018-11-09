@@ -30,6 +30,14 @@
 (defn clear-js-timeout! [timer]
   #?(:cljs (js/clearTimeout timer)))
 
+(defn- is-atom?
+  "Returns TRUE when x is an atom."
+  [x]
+  #?(:cljs (instance? cljs.core.Atom x)
+     :clj  (instance? clojure.lang.Atom x)))
+
+(s/def ::atom (s/with-gen is-atom? #(s/gen #{(atom {}) (atom #{}) (atom nil)})))
+
 ;; Active State Machine and ENV specs
 (s/def ::state-map map?)
 (s/def ::fulcro-ident (s/with-gen futil/ident? #(s/gen #{[:table 1] [:other :tab]})))
@@ -391,7 +399,7 @@
 (Defn update-fulcro-state!
   "Put the evolved state-map from an env into a (Fulcro) state-atom"
   [{::keys [asm-id] :as env} state-atom]
-  [::env ::util/atom => nil?]
+  [::env ::atom => nil?]
   (let [next-state (when env (asm-value env ::active-state))]
     (when-let [new-fulcro-state (some-> (::state-map env)
                                   ;; GC state machine if it exited
