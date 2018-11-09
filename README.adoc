@@ -2,6 +2,8 @@
 
 image:https://img.shields.io/clojars/v/fulcrologic/fulcro-incubator.svg[link=https://clojars.org/fulcrologic/fulcro-incubator]
 image:https://cljdoc.xyz/badge/fulcrologic/fulcro-incubator[link=https://cljdoc.xyz/d/fulcrologic/fulcro-incubator/CURRENT]
+image:https://circleci.com/gh/fulcrologic/fulcro-incubator/tree/master.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-incubator/tree/master"] (release)
+image:https://circleci.com/gh/fulcrologic/fulcro-incubator/tree/develop.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-incubator/tree/develop"] (develop)
 
 This is a set of features/utilities for Fulcro that are considered useful but have either not yet reached maturity
 or are intended to be forked into new projects in the future.
