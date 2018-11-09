@@ -1,0 +1,8 @@
+#kaocha/v1
+    {:tests    [{:id           :unit
+                 :test-paths   ["src/test"]
+                 :source-paths ["src/main"]}]
+     :reporter [fulcro-spec.reporters.terminal/fulcro-report]
+     :plugins  [:kaocha.plugin/randomize
+                :kaocha.plugin/filter
+                :kaocha.plugin/capture-output]}

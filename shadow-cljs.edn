@@ -14,6 +14,13 @@
                                           :http-resource-root "."}
                        :modules          {:main {:entries [fulcro.incubator.workspaces.main]}}}
 
+          :test       {:target           :browser-test
+                       :test-dir         "resources/public/js/test"
+                       :ns-regexp        "test$"
+                       :compiler-options {:static-fns false}
+                       :devtools         {:http-port 8021
+                                          :http-root "resources/public/js/test"}}
+
           :ci         {:target    :karma
-                       :ns-regexp "-ws$"
+                       :ns-regexp ".*-test$"
                        :output-to "target/ci.js"}}}
