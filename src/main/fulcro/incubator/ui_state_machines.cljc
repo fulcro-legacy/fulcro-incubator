@@ -10,7 +10,6 @@
     [fulcro.incubator.mutation-interface :as mi]
     [fulcro.incubator.spec-helpers :refer [Defn =>]]
     [fulcro.util :as futil]
-    [ghostwheel.core :as g]
     [taoensso.timbre :as log]))
 
 ;; Active State Machine and ENV specs
@@ -98,7 +97,7 @@
      ::actor->ident     actor->ident
      ::local-storage    {}}))
 
-(Defn ^{::g/ignore-fx true} asm-path
+(Defn asm-path
   "Returns the path to an asm elements in an asm `env`."
   [{::keys [state-map asm-id] :as env} ks]
   [::env (s/or :v vector? :k keyword?) => vector?]
@@ -121,7 +120,7 @@
   (let [states (-> (lookup-state-machine-field env ::states) keys set)]
     (contains? states state-id)))
 
-(Defn ^{::g/ignore-fx true} activate
+(Defn activate
   "Move to the given state. Returns a new env."
   [env state-id]
   [::env ::state-id => ::env]
@@ -196,7 +195,7 @@
    [::env ::actor-name any? => any?]
    (actor-value env actor-name k true)))
 
-(Defn ^{::g/ignore-fx true} alias-value
+(Defn alias-value
   "Get a Fulcro state value by state machine data alias."
   [{::keys [state-map] :as env} alias]
   [::env keyword? => any?]
@@ -206,7 +205,7 @@
       (log/error "Unable to find alias in state machine:" alias)
       nil)))
 
-(Defn ^{::g/ignore-fx true} set-aliased-value
+(Defn set-aliased-value
   [env alias new-value]
   [::env keyword? any? => ::env]
   (if-let [real-path (resolve-alias env alias)]
