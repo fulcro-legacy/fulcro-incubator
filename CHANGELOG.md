@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.14
+------
+- Got rid of ghostwheel dependency madness
+- Added CI support
+
 0.0.13
 ------
 - Added remote support to state machines
