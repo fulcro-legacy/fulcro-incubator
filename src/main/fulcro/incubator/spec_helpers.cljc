@@ -804,7 +804,8 @@
                 fqsym (symbol nspc (name sym))]
             `(do
                (>defn ~@forms)
-               (dev-instrument! (quote ~fqsym))))))
+               (dev-instrument! (quote ~fqsym))
+               ~sym))))
 
 #?(:clj (defmacro Defn- [& forms]
           (let [sym   (first forms)
@@ -812,5 +813,6 @@
                 fqsym (symbol nspc (name sym))]
             `(do
                (>defn- ~@forms)
-               (dev-instrument! (quote ~fqsym))))))
+               (dev-instrument! (quote ~fqsym))
+               ~sym))))
 

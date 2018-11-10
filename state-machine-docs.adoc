@@ -1,7 +1,7 @@
 = UI State Machines
 :author: Tony Kay
-:revdate: November 2, 2018
-:revnumber: 1
+:revdate: November 7, 2018
+:revnumber: 2
 :lang: en
 :encoding: UTF-8
 :doctype: book
@@ -62,7 +62,7 @@ not even name their Fulcro state according to the state machine's conventions.
 . State machines can be *instanced*, so that more than one of the same kind can be running at once.
 . Active state machine data is stored in Fulcro's app database, so it honors all history properties (e.g.
 support viewer, etc.)
-. Any number of simultaneous state machines of varying type can be running at once.
+. Any number of simultaneous state machines of varying type can be running at once (even on the same component).
 . The state machine declarations are reusable, and make it easy to "derive" new
 definitions based on existing ones.
 
@@ -99,6 +99,8 @@ The next layer of aliasing is for the data our state machine will manipulate:
    ...})
 ```
 
+== Derived State Machines  [[DerivedSM]]
+
 These aliases are based, as you can see, on the actor names.  `:visible?`, for example,
 is an alias for the `:dialog` actor's `:ui/active?` property.  This mapping can be easily overriden
 in a "derived" state machine by simple data manipulation:
@@ -131,7 +133,7 @@ The state machine can come with a simple plugin like this:
 ```
 
 that just checks that the fields are non-empty, and someone could easily provide an alternative
-implementation with the trick shown for overriding an alias in <<Aliases, aliases>>.
+implementation with the trick shown for overriding an alias in <<DerivedSM, Derived State Machines>>.
 
 == States
 
@@ -144,6 +146,49 @@ The states *must* include an `:initial` state, whose handler will be invoked wit
 handler is always invoked for each event that is triggered while it is active, but
 only the `:initial` state sees a `::uism/started` event.
 
+The overall configuration of states looks like this:
+
+```
+  ::uism/states {:initial { ... }   ; REQUIRED
+                 :state-id { ... }
+                 :state2-id { ... }
+```
+
+and you have two options for what you put in a state's definition.
+
+=== Option 1 -- Predicate/transition/handler (preferred)
+
+With this option you specify a map of events to a description of what should happen:
+
+```
+::uism/states {:initial { :thing-happened! {::uism/event-predicate (fn [env] ... true)
+                                            ::uism/target-state :next-state
+                                            ::uism/handler (fn [env] env) }}
+               :next-state { ... }
+               ...
+```
+
+In this case the event `:thing-happened!` is the an event that can happen while in the `:initial` state. If that
+event occurs, the following things are done:
+
+. *If* there is an event predicate, it is run. The default predicate is `(constantly true)`.  If the predicate returns
+`false` then the event is ignored *and nothing else happens*.
+. *If* the predicate returned true (or didn't exist), then the handler is run.  Any effects it has
+on `env` are propagated.
+. *If* the predicate returned true and there is a `target-state`, then that target state will be activated.
+
+NOTE: You *can* use `(uism/activate :state)` in the `handler`, *but* that will prevent tools that try to
+do things like diagram your state machine from seeing that transition.  If you use *both* target-state *and*
+`activate` in the `handler` then the *`handler` wins*.  This is typically used when you'd like a given (exceptional) condition
+to cause the state machine to finish and exit (or go to some alternate state).
+
+=== Option 2 -- A Single Handler
+
+This format of defining the states allows you to write just one function, but is not normally recommended, as it
+does not give you the ability to analyze the states/events as a diagram via simple data analysis.  It does, however,
+allow you complete flexibility with how the state machine is defined, so you are welcome to use it. Basically you do
+not define an event map, and instead embed a handler in it's place:
+
 ```
    ::uism/states  {:initial
                    {::uism/handler
@@ -152,14 +197,9 @@ only the `:initial` state sees a `::uism/started` event.
                        ...)}}
 ```
 
-NOTE: Future work? Should "::uism/started" be an event for every state transition? I didn't write it
-that way yet for a couple of reasons..one of which being that it would be easy to get into
-infinite state loops that way.  The current implementation will only ever run one state
-handler per event.
-
 == Writing Handlers and Data Manipulation
 
-From here it's pretty easy.  The handlers are functions that receive a SM environment and
+From here it's pretty easy.  The handlers are functions that receive a state machine (SM) environment and
 must return a SM environment (or nil, which is considered "no change"). Since the
 environment is an immutable value, you will typically thread a sequence of these
 together to end up with a final result to return from the handler:
@@ -173,80 +213,21 @@ together to end up with a final result to return from the handler:
 
 The library includes functions for dealing with Fulcro state via the aliases we've defined:
 
-`(uism/set-aliased-value env alias new-value)`:: Sets Fulcro state associated with the given alias
-to the given new value.
+`(uism/set-aliased-value env alias new-value & more-kv-pairs)`:: Sets Fulcro state associated with the given alias
+to the given new value. Can accept multiple k-v pairs (like `assoc`).
 `(uism/alias-value env alias)`:: Gets the current Fulcro state value associated with the alias.
 `(uism/run env plugin-name)`:: Runs the given plugin (passing it all of the aliased data from
 current Fulcro state) and returns the value from the plugin.
 `(uism/activate env state-name)`:: Returns a new env with `state-name` as the new active state.
 `(uism/exit env)`:: Returns a new env that will end the state machine (and GC it's instance from
 Fulcro state) after the results of the handler are processed.
+`(uism/store env k v)`:: Saves a state-machine local value.  Useful for keeping track of some additional
+bit of data while your state machine is running.
+`(uism/retrieve env k)`:: Get state-machine local value.
 
 There are numerous other helpers, but these suffice to build pretty powerful state machines.
 
-Here's a complete example for handling fairly complete login logic:
 
-```
-(uism/defstatemachine login-machine
-  {::uism/actor-names #{:dialog :form}
-   ::uism/aliases     {:visible?       [:dialog :ui/active?]
-                       :login-enabled? [:form :ui/login-enabled?]
-                       :busy?          [:form :ui/busy?]
-                       :error          [:form :ui/login-error]
-                       :username       [:form :user/email]
-                       :password       [:form :user/password]}
-   ::uism/plugins     {:valid-credentials? (fn [{:keys [username password]}]
-                                             (and (seq username) (seq password)))}
-   ::uism/states      {:initial
-                       ;; Remember, this one triggers on initial SM start. It does *not*
-                       ;; have to transition to a new state, but often you will want
-                       ;; to for clarity.
-                       {::uism/handler (fn [env]
-                                         (-> env
-                                           (uism/set-aliased-value :visible? true)
-                                           (uism/set-aliased-value :login-enabled? false)
-                                           (uism/set-aliased-value :username "")
-                                           (uism/set-aliased-value :password "")
-                                           (uism/activate :filling-info)))}
-
-                       ;; Remain in this state while they are filling out the fields
-                       ;; Changes to state that are triggered through the UI can cause
-                       ;; events here, which can then control things like the
-                       ;; ability to "submit" and whether or not a "busy" spinner is being
-                       ;; shown.
-                       :filling-info
-                       {::uism/handler
-                        (fn [{::uism/keys [event-id] :as env}]
-                          (let [valid?   (uism/run env :valid-credentials?)
-                                enabled? (uism/alias-value env :login-enabled?)]
-                            (cond-> env
-                              (not= valid? enabled?)
-                              (uism/set-aliased-value :login-enabled? valid?)
-
-                              (and valid? (= event-id :login!))
-                              (->
-                                (uism/set-aliased-value :login-enabled? false)
-                                (uism/set-aliased-value :error "")
-                                (uism/set-aliased-value :busy? true)
-                                (uism/activate :attempting-login)))))}
-
-                       ;; This state will only be active while the server is busy. We'll
-                       ;; use Incubator's `pmutate` to easily tie together the results of
-                       ;; login with an "event" sent here.
-                       :attempting-login
-                       {::uism/handler (fn [{::uism/keys [event-id event-data] :as env}]
-                                         (log/info "Attempting login: " event-id)
-                                         (case event-id
-                                           :success (-> env
-                                                      (uism/set-aliased-value :busy? false)
-                                                      (uism/set-aliased-value :visible? false)
-                                                      (uism/exit))
-                                           :failure (-> env
-                                                      (uism/set-aliased-value :error "Invalid credentials. Please try again.")
-                                                      (uism/set-aliased-value :busy? false)
-                                                      (uism/activate :filling-info))
-                                           env))}}})
-```
 
 == Using State Machines from the UI
 
@@ -259,15 +240,53 @@ The first thing you need to do is create an instance and start it:
 
 `(uism/begin! component machine-def instance-id actor-map)`:: Installs an instance of a state
 machine (to be known as `instance-id`), based on the definition in `machine-def`, into
-Fulcro's state and sends the `::uism/started` event. The `actor-map` is a map from state
-machine actor names to idents of components.
+Fulcro's state and sends the `::uism/started` event.
+
+==== The Actor Map
+
+The `actor-map` is a map keyed by actor-id that lets the state machine know what components in your Fulcro app are being
+acted upon.  It also supplied the necessary information that is needed when doing remote mutations
+that return values and loads (since a component class or instance is needed to figure out normalization).
+
+The actor map values must be one of the following:
+
+An ident:: In this case the actor must not be used with mutations that return a value or loads.
+A component class:: In this case the actor is assumed to be a singleton. The ident will be derived by calling
+`(prim/get-ident class {})`.  This actor will work properly with remote return values and loads.
+A component instance (e.g. `this`):: A component instance can be found using the Fulcro indexer
+(e.g. `(prim/ref->any reconciler [:person/by-id 1])`).  A component instance is sufficient for the state
+machine to find the corrent ident and query for the UI component, so it will work with loads/mutations.
+
+=== Example Starts
 
 For example, to start the above state machine with an instance ID of `::loginsm`:
 
 ```
-(uism/begin! this login-machine ::loginsm {:dialog (prim/get-ident Dialog {})
-                                           :form   (prim/get-ident LoginForm {})})
+(uism/begin! this login-machine ::loginsm {:dialog Dialog
+                                           :session Session
+                                           :form   LoginForm})
 ```
+
+In this example all three of our components are singletons whose idents are constant.  If you are working
+with actors that are live you either need to use a react instance (such as `this`), or an explicit ident:
+
+```
+(uism/begin! this person-editing-machine ::personsm {:person [:person/by-id 3]
+                                                     :editor this
+                                                     :dialog Dialog})
+```
+
+If you plan to use mutations or loads against an actor that is specified with an explicit ident you will
+need to tell the state machine system what Fulcro component class is used for normalization:
+
+```
+(uism/begin! this person-editing-machine ::personsm {:person (uism/with-actor-class [:person/by-id 3] Person)
+                                                     :editor this
+                                                     :dialog Dialog})
+```
+
+Failing to do so may cause your state machine to misbehave (the state machine actually tries to derive the class from
+Fulcro's indexes, but that will only work if the component is on-screen).
 
 === Triggering Events
 
@@ -282,6 +301,8 @@ update a string:
 
 `(uism/set-string! component state-machine-id data-alias event-or-string)`:: Puts a string into
 the given data alias (you can pass a string or a DOM onChange event).
+`(uism/set-value! component state-machine-id data-alias raw-value)`:: Puts a raw (unmodified) value into
+the given data alias.
 
 You can define other "custom" events to stand for whatever you want (and they can include
 aux data that you can pass along to the handlers).  To trigger any kind of event use:
@@ -302,83 +323,154 @@ additional parameter:
 (uism/trigger! reconciler ::loginsm :failure {:message "Server is down. Try in 15 minutes."})
 ```
 
+== Mutations and State Machines
+
+Functions are included to trigger *remote* mutations.  The state machine handlers are
+already an implementation of the optimistic side of a mutation, so really what we need is a way to trigger
+a remote (pessimistic) mutation and trigger events based on the outcome.
+
+In the state machine system *all* mutations are run through as *pessimistic mutations* (see the documentation for the
+namespace `pessimistic-mutations.cljc`).
+
+This means that you can receive ok/error results, and can easily merge return values.
+
+The `trigger-remote-mutation` function does this. It takes:
+
+*  `env` - The SM handler environment
+*  `actor` - The name (keyword) of a defined actor.  The mutation will be run in the context of this actor's state
+            (see `pm/pmutate!`), which means that progress will be visible there. THERE MUST BE A MOUNTED COMPONENT
+            with this actor's name ON the UI, or the mutation will abort. This does *not* have to be the same
+            component as you're (optionally) returning from the mutation itself. It is purely for progress UI.
+*  `mutation` - The symbol (or mutation declaration) of the *server* mutation to run. This function will *not* run a local
+   version of the mutation.
+*  `options-and-params` - The parameters to pass to your mutation. This map can *also* include these additional
+options:
+
+NOTE: The mutation system never assumes the data type of a return value
+
+`::pm/returning Class` :: Option of pmutate to supply a component for normalizing the returned result. Use `(actor-class actor-name)`
+to get the correct class for an actor.
+`::pm/target explicit-target` :: Option of pmutate for targeting retuned result.
+`::uism/target-actor actor` :: Helper that can translate an actor name to a target, if returning a result.
+`::uism/target-alias field-alias` :: Helper that can translate a data alias to a target (ident + field).
+`::uism/ok-event event-id` :: The SM event to trigger when the pessimistic mutation succeeds (no default).
+`::uism/error-event event-id` :: The SM event to trigger when the pessimistic mutation fails (no default).
+`::uism/ok-data map-of-data` :: Data to include in the event-data on an ok event
+`::uism/error-data map-of-data` :: Data to include in the event-data on an error event
+`::uism/mutation-remote` :: The keyword name of the Fulcro remote (defaults to :remote)
+
+The pessimistic mutation response (independent of targeting and such) *will be merged* into the `::uism/event-data`
+that is sent in the SM handler `env`, which means the `ok-event` and `error-event` handlers can simply look in event-data for
+the data sent back from the server.
+
+This function does *not* side effect.  It queues the mutation to run after the handler exits."
+
+IMPORTANT: If you need to return a class type that is not one of your actors, then you should add an actor to
+represent it (even if you do no other manipulation for it). That will keep your state machine code decoupled from
+your UI code, which will prevent circular references and state machine code reuse.
+
+== Loads and State Machines
+
+The API includes these functions for doing loads in the context of a running state
+machine:
+
+`(load env k component-class params)`:: Just like Fulcro's load, but takes a SM env. Use `actor-class` to get a component class of an actor.
+`(load-actor env actor-name params)`:: (Re)load the given actor.
+
+The `params` of these functions can include these special values:
+
+`:fulcro.client.primitives/component-class`:: A component class.  Only used on `load-actor`, and
+only if the actor isn't on-screen. Generally do not use. See note below.
+`::uism/post-event`:: An event to send when the load is done (instead of calling a mutation)
+`::uism/post-event-params`:: Extra parameters to send as event-data on the post-event.
+
+NOTE: The helper function `(uism/actor-class actor-name)` can be used to retrieve the known Fulcro component
+class for an actor (if available). This should always be used in preference to the `component-class` option above
+since the helper function does not couple your state machine code to UI code.
+
+== Timer Events
+
+Many UI interactions work better with some kind of timeout.  For example, you don't want to issue a load on an
+autocomplete search field until the user stops typing for 300ms, or perhaps you'd like to close a dialog and show
+an error if a data load takes more than 5 seconds.
+
+The `(uism/set-timeout env timer-id event-id event-data timeout cancel-on-events)` function can be used
+in a handler to schedule a ms timer, where `timer-id` is a user-invented name for the timer (keyword),
+the `event-id` is the invented keyword for the event you want to send, `event-data` is additional
+data you'd like to send with the event, and `timeout` is in ms.
+
+The `cancel-on-events` parameter is a function that will be sent the name of any event that occurs while the timeout is
+waiting. If it returns `true` then the timeout will be auto-cancelled.
+
+You can also explcitly cancel a timeout with `(uism/clear-timeout! env timer-id)
+
+== Aborting Loads and Mutations
+
+The built-in Fulcro support for aborting network requests requires the use of the actual application.  The general
+recommendation is to save your app into an atom via Fulcro's `started-callback`.
+
+The state machine load/mutation system supports abort IDs by simply adding an `:abort-id` to the options map:
+
+```
+(uism/load env ::session (uism/actor-class env :session) {:abort-id         :abort/session-load
+                                                          ::uism/post-event :session-checked})
+```
+
+You can then explicitly cancel such a request in the normal way (via your app atom) inside of your state
+machine handlers:
+
+```
+...
+  ::uism/handler
+    (fn [env]
+      (when @my-app
+        (fc/abort-request! @my-app :abort/session-load))
+      env)
+```
+
 == Full Example
 
-This combination of feature leads to very clean UI code.  The above state machine can drive
-complete (and complex) behaviors for a variety of login components (full-screen, corner pop-up, etc.).
+This combination of feature leads to very clean UI code.
 
-Here's a complete UI that works with the above state machine:
+See https://github.com/fulcrologic/fulcro-incubator/blob/master/src/workspaces/fulcro/incubator/state_machine_ws.cljs[state_machine_ws.cljs]
+for the full example.
+
+== Parting Thoughts
+
+This relatively small set of primitives gives you quite a bit of power.  Here are some things you
+can do with this system that you might not immediately realize:
+
+- *Associate Multiple Machines with a Control*
+
+You might have a state machine that is interested in tracking something like the autocomplete status of a dropdown.
+Another state machine could be tracking the overall state of the form that the autocomplete is embedded in.
+
+- *Create a Library of Reusable Machines*
+
+We've mentioned this, but it bears repeating.  Common patterns exist all over the place.
+
+Take an autocomplete dropdown.  The behavior of waiting for some period of time between
+keystrokes before issuing a load, cancelling a load if the user starts typing again,
+showing/hiding the list of options and such can all be parameterized.  The loads *load an
+actor with parameters*.  This means the actual query and results for the load portion
+are controlled at `begin!`, not from within the state machine.  Various other aspects
+are also easy to make "tunable" by using the state machine's local storage:
 
 ```
-;; This is the ONLY Fulcro mutation!  Simply send state machine events.
-(defmutation login [_]
-  (action [{:keys [reconciler]}]
-    (uism/trigger! reconciler ::loginsm :login!))
-  (ok-action [{:keys [reconciler]}]
-    (uism/trigger! reconciler ::loginsm :success))
-  (error-action [{:keys [reconciler]}]
-    (uism/trigger! reconciler ::loginsm :failure))
-  (remote [env] (pm/pessimistic-mutation env)))
-(mi/declare-mutation login `login)
+(defstatemachine dropdown-autocomplete
+  {::uism/actors #{:dropdown-control ...}
+   ::uism/aliases {:options-visible? [:dropdown-control :ui/show-options?]
+                   ...}
+   ::uism/states
+     {:initial {
+       ::uism/events {::uism/started
+                       {::uism/handler (fn [{::uism/keys [event-data] :as env}]
+                                         (uism/store env :params event-data)
+                                         ...
+...
 
-;; A simple wrapper function that invokes the mutation and morphs the parameters from
-;; UI props
-;; (for example, if the server expected that parameters to be named differently)
-(defn login! [this {:keys [user/email user/password]}]
-  (let []
-    (pm/pmutate! this `login {:username email :password password})))
-
-;; Notice how purely declarative these UI components are. There's not even logic
-;; around the "login!" event, since the state machine will "do the right thing" if that
-;; event arrives for the "wrong" state.
-(defsc LoginForm [this {:keys [ui/login-enabled? ui/login-error ui/busy? user/email user/password] :as props}]
-  {:query         [:ui/login-enabled? :ui/login-error :ui/busy? :user/email :user/password]
-   :ident         (fn [] [:COMPONENT/by-id ::login])
-   :initial-state {:user/email "" :user/password ""}}
-  (let [error?        (seq login-error)
-        error-classes [(when error? "error")]]
-    (dom/div :.ui.container.form {:classes (into error-classes [(when busy? "loading")])}
-      (dom/div :.field {:classes error-classes}
-        (dom/label "Email")
-        (dom/input {:value     email
-                    :onKeyDown (fn [evt] (when (evt/enter? evt) (login! this props)))
-                    :onChange  (fn [evt] (uism/set-string! this ::loginsm :username evt))}))
-      (dom/div :.field {:classes error-classes}
-        (dom/label "Password")
-        (dom/input {:value     password
-                    :onKeyDown (fn [evt]
-                                 (when (evt/enter? evt) (login! this props)))
-                    :onChange  (fn [evt] (uism/set-string! this ::loginsm :password evt))}))
-      (dom/div :.field
-        (dom/button {:disabled (not login-enabled?)
-                     :onClick  (fn [] (login! this props))}
-          "Login"))
-      (when error?
-        (dom/div :.ui.error.message
-          (dom/p login-error))))))
-
-(def ui-login-form (prim/factory LoginForm {:keyfn :db/id}))
-
-(defsc Dialog [_ {:keys [ui/active? dialog/form]}]
-  {:query         [:ui/active? {:dialog/form (prim/get-query LoginForm)}]
-   :ident         (fn [] [:COMPONENT/by-id ::dialog])
-   :initial-state {:ui/active? false :dialog/form {}}}
-  (sui/ui-modal {:open active?}
-    (sui/ui-modal-header {} "Login")
-    (sui/ui-modal-content {}
-      (ui-login-form form))))
-
-(def ui-dialog (prim/factory Dialog {:keyfn :ui/active?}))
-
-;; A simple demo root...need something to "start" the state machine
-(defsc Root [this {:keys [root/dialog]}]
-  {:query         [{:root/dialog (prim/get-query Dialog)}]
-   :initial-state {:root/dialog {}}}
-  (dom/div nil
-    (dom/button
-      {:onClick (fn []
-                  (uism/begin! this login-machine ::loginsm {:dialog (prim/get-ident Dialog {})
-                                                             :form   (prim/get-ident LoginForm {})}))}
-      "Start state machine")
-    (ui-dialog dialog)))
+(uism/begin! this dropdown-autocomplete :dropdown-car-make-sm
+  {:dropdown-control (uism/with-actor-class [:dropdown/id :car-make] Dropdown))}
+  {:dropdown-key-timeout 200})
 ```
+
