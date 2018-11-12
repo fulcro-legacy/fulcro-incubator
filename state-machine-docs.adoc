@@ -161,10 +161,11 @@ and you have two options for what you put in a state's definition.
 With this option you specify a map of events to a description of what should happen:
 
 ```
-::uism/states {:initial { :thing-happened! {::uism/event-predicate (fn [env] ... true)
-                                            ::uism/target-state :next-state
-                                            ::uism/handler (fn [env] env) }}
-               :next-state { ... }
+::uism/states {:initial    {::uism/events 
+                            {:thing-happened! {::uism/event-predicate (fn [env] ... true)
+                                               ::uism/target-state    :next-state
+                                               ::uism/handler         (fn [env] env)}}}
+               :next-state {...}
                ...
 ```
 
