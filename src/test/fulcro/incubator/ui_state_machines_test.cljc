@@ -193,7 +193,7 @@
                                 :boo)
 
       (log/-log! _ _ _ _ _ _ _ msg _ _) =1x=> (assertions "Logs an error"
-                                                (force msg) => ["Did not find a handler for " :boo])
+                                                (force msg) => ["UNEXPECTED EVENT: Did not find a way to handle event" nil "in the current active state:" :boo])
 
       (assertions
         "returns core identity"
