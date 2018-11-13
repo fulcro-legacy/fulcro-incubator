@@ -378,12 +378,15 @@ machine:
 `(load env k component-class params)`:: Just like Fulcro's load, but takes a SM env. Use `actor-class` to get a component class of an actor.
 `(load-actor env actor-name params)`:: (Re)load the given actor.
 
-The `params` of these functions can include these special values:
+The `params` of these functions can include most of the normal Fulcro load options (such as marker, which
+defaults to `false` for state machines), along with these special values:
 
 `:fulcro.client.primitives/component-class`:: A component class.  Only used on `load-actor`, and
 only if the actor isn't on-screen. Generally do not use. See note below.
 `::uism/post-event`:: An event to send when the load is done (instead of calling a mutation)
 `::uism/post-event-params`:: Extra parameters to send as event-data on the post-event.
+`::uism/fallback-event`:: The event to send if the load triggers a fallback.
+`::uism/fallback-event-params`:: Extra parameters to send as event-data on a fallback.
 
 NOTE: The helper function `(uism/actor-class actor-name)` can be used to retrieve the known Fulcro component
 class for an actor (if available). This should always be used in preference to the `component-class` option above
@@ -475,3 +478,28 @@ are also easy to make "tunable" by using the state machine's local storage:
   {:dropdown-key-timeout 200})
 ```
 
+=== Form Validation
+
+My initial experiments lead me towards the opinion that form validation does not generally belong in a state
+machine. Here are my reasons:
+
+* Rules around validation are often large and complex. This leads to a lot of states that become hard to follow.
+* The forms-state namespace in Fulcro does a nice job of tracking field state, letting you undo, diff, etc.  It
+is much easier to "follow" validation at the UI layer, where it is also simpler to co-locate validity checks
+and messages with fields.
+
+So, simple things like a login form might be ok to validate in the state machine, but larger forms should
+probably localize validation to the form itself.
+
+There is one element that you will often need *within* the state machine: whether or not the form *is*
+currently valid.
+
+Remember:
+
+* The `env` in the state machine handler includes the current Fulcro state map as the key `::uism/state-map`.
+* You can use `db->tree` to convert a state map into a tree based on a component's class.
+* You can get an actor's component class with `uism/actor-class`.
+* The form-state support in Fulcro can give you a validity check based on the form props.
+
+You can also pass specific event data when you trigger events, so you can trigger your own state change events
+(instead of using `uism/set-value!`) that include the current validity of the form.

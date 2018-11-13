@@ -1,5 +1,6 @@
 (ns fulcro.incubator.ui-state-machines
   #?(:cljs (:require-macros [fulcro.incubator.ui-state-machines]))
+  (:refer-clojure :exclude [load])
   (:require
     [clojure.set :as set]
     [clojure.spec.alpha :as s]
@@ -386,6 +387,20 @@
     (defer #(df/load reconciler query-key component-class load-options)))
   nil)
 
+(defmutation handle-load-error [_]
+  (action [{:keys [reconciler load-request]}]
+    (let [{::keys [asm-id error-event error-data]} (some-> load-request :post-mutation-params)]
+      (if (and asm-id error-event)
+        (defer
+          #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
+                                                                             ::event-id error-event}
+                                                                      error-data (assoc ::event-data error-data)))]))
+        (do
+          (log/debug "A fallback occurred, but no event was defined by the client. Sending generic event.")
+          (defer
+            #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
+                                                                               ::event-id ::load-error}))])))))))
+
 (Defn queue-loads! [reconciler env]
   [::fulcro-reconciler ::env => nil?]
   (let [queued-loads (::queued-loads env)]
@@ -479,8 +494,8 @@
                         (generic-event-handler env))]
     (if handler
       handler
-      (do
-        (log/error "Did not find a handler for " current-state)
+      (let [{::keys [event-id]} env]
+        (log/error "UNEXPECTED EVENT: Did not find a way to handle event" event-id "in the current active state:" current-state)
         identity))))
 
 (defn- ui-refresh-list
@@ -779,9 +794,33 @@
 (s/def ::load (s/keys :opt [::query-key ::prim/component-class ::load-options]))
 (s/def ::queued-loads (s/coll-of ::load))
 
+(defn- convert-load-options [env options]
+  (let [{::keys [post-event post-event-params fallback-event fallback-event-params]} options
+        {:keys [marker]} options
+        marker  (if (nil? marker) false marker) ; force marker to false if it isn't set
+        {::keys [asm-id]} env
+        options (-> (dissoc options ::post-event ::post-event-params ::fallback-event ::fallback-event-params ::prim/component-class)
+                  (assoc :marker marker :abort-id asm-id :fallback `handle-load-error :post-mutation-params (merge post-event-params {::asm-id asm-id}))
+                  (cond->
+                    post-event (->
+                                 (assoc :post-mutation `trigger-state-machine-event)
+                                 (update :post-mutation-params assoc ::event-id post-event))
+                    post-event-params (update :post-mutation-params assoc ::event-data post-event-params)
+                    ;; piggieback the fallback params and event on post mutation data, since it is the only thing we can see
+                    fallback-event (update :post-mutation-params assoc ::error-event fallback-event)
+                    fallback-event-params (update :post-mutation-params assoc ::error-data fallback-event-params)))]
+    options))
+
 (Defn load
   "Identical API to fulcro's data fetch `load`, but using a handle `env` instead of a component/reconciler.
    Adds the load request to then env which will be sent to Fulcro as soon as the handler finishes.
+
+  The `options` are as in Fulcro's load, with the following additional keys for convenience:
+
+  `::uism/post-event`:: An event to send when the load is done (instead of calling a mutation)
+  `::uism/post-event-params`:: Extra parameters to send as event-data on the post-event.
+  `::uism/fallback-event`:: The event to send if the load triggers a fallback.
+  `::uism/fallback-event-params`:: Extra parameters to send as event-data on a fallback.
 
    NOTE: In general a state machine should declare an actor for items in the machine and use `load-actor` instead of
    this function so that the state definitions themselves need not be coupled (via code) to the UI."
@@ -790,16 +829,7 @@
    (load env k component-class {}))
   ([env k component-class options]
    [::env keyword? ::prim/component-class ::load-options => ::env]
-   (let [{::keys [post-event post-event-params]} options
-         {::keys [asm-id]} env
-         options (-> (dissoc options ::post-event ::post-event-params)
-                   (assoc :abort-id asm-id)
-                   (cond->
-                     post-event (assoc :post-mutation `trigger-state-machine-event
-                                       :post-mutation-params (merge post-event-params
-                                                               {::asm-id     asm-id
-                                                                ::event-id   post-event
-                                                                ::event-data post-event-params}))))]
+   (let [options (convert-load-options env options)]
      (update env ::queued-loads (fnil conj []) (cond-> {}
                                                  component-class (assoc ::prim/component-class component-class)
                                                  k (assoc ::query-key k)
@@ -811,8 +841,12 @@
 
    options can contain the normal `df/load` parameters, and also:
 
-   `::prim/component-class` - The defsc name of the component to use for normalization and query. Only needed if the
-     actor was not declared using a Fulcro component or component class.
+  `::prim/component-class` - The defsc name of the component to use for normalization and query. Only needed if the
+    actor was not declared using a Fulcro component or component class.
+  `::uism/post-event`:: An event to send when the load is done (instead of calling a mutation)
+  `::uism/post-event-params`:: Extra parameters to send as event-data on the post-event.
+  `::uism/fallback-event`:: The event to send if the load triggers a fallback.
+  `::uism/fallback-event-params`:: Extra parameters to send as event-data on a fallback.
 
    Adds a load request to then env which will be sent to Fulcro as soon as the handler finishes."
   ([env actor-name]
@@ -820,6 +854,7 @@
    (load-actor env actor-name {}))
   ([env actor-name {::prim/keys [component-class] :as options}]
    [::env ::actor-name ::load-options => ::env]
-   (update env ::queued-loads (fnil conj []) (cond-> {::actor-name   actor-name
-                                                      ::load-options (dissoc options ::prim/component-class)}
-                                               component-class (assoc ::prim/component-class component-class)))))
+   (let [options (convert-load-options env options)]
+     (update env ::queued-loads (fnil conj []) (cond-> {::actor-name   actor-name
+                                                        ::load-options options}
+                                                 component-class (assoc ::prim/component-class component-class))))))

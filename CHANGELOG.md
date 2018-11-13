@@ -1,5 +1,13 @@
 # Change Log
 
+0.0.17
+------
+- Added fallback support for loads
+
+0.0.16
+------
+- Fixed duplicate source in JAR
+
 0.0.15
 ------
 - Finished state machine support for: remotes, aborting network

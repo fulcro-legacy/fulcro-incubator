@@ -62,7 +62,7 @@
                                                                 (uism/actor-class env :session)
                                                                 {:abort-id         :abort/session-load
                                                                  ::uism/post-event :session-checked})
-                                                              (uism/set-timeout :timer/session-load :event/session-load-timeout {} 400 #{:session-checked})
+                                                              (uism/set-timeout :timer/session-load :event/session-load-timeout {} 1000 #{:session-checked})
                                                               (uism/set-aliased-value
                                                                 :visible? true
                                                                 :login-enabled? false
@@ -92,7 +92,7 @@
                                                    (-> env
                                                      (uism/set-aliased-value :login-enabled? false :error "" :busy? true)
                                                      ;; set a 2s timeout that auto-cancels on success or failure events
-                                                     (uism/set-timeout :timer/login :login-timed-out! {} 400 #{:success :failure})
+                                                     (uism/set-timeout :timer/login :login-timed-out! {} 2000 #{:success :failure})
                                                      (uism/trigger-remote-mutation :form `login
                                                        (merge event-data
                                                          {::uism/ok-event        :success
@@ -104,7 +104,8 @@
                                                  ::uism/target-state
                                                  :attempting-login}
 
-                    :session-checked            {::uism/handler (fn [env]
+                    :session-checked            {::uism/handler (fn [{::uism/keys [event-data] :as env}]
+                                                                  (log/info "Load complete" event-data)
                                                                   (let [logged-in? (uism/alias-value env :logged-in?)]
                                                                     (when logged-in?
                                                                       (js/alert "The server indicated you were already logged in.")
