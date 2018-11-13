@@ -387,19 +387,21 @@
     (defer #(df/load reconciler query-key component-class load-options)))
   nil)
 
-(defmutation handle-load-error [_]
-  (action [{:keys [reconciler load-request]}]
-    (let [{::keys [asm-id error-event error-data]} (some-> load-request :post-mutation-params)]
-      (if (and asm-id error-event)
+(defn handle-load-error* [reconciler load-request]
+  (let [{::keys [asm-id error-event error-data]} (some-> load-request :post-mutation-params)]
+    (if (and asm-id error-event)
+      (defer
+        #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
+                                                                           ::event-id error-event}
+                                                                    error-data (assoc ::event-data error-data)))]))
+      (do
+        (log/debug "A fallback occurred, but no event was defined by the client. Sending generic event.")
         (defer
           #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
-                                                                             ::event-id error-event}
-                                                                      error-data (assoc ::event-data error-data)))]))
-        (do
-          (log/debug "A fallback occurred, but no event was defined by the client. Sending generic event.")
-          (defer
-            #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
-                                                                               ::event-id ::load-error}))])))))))
+                                                                             ::event-id ::load-error}))]))))))
+(defmutation handle-load-error [_]
+  (action [{:keys [reconciler load-request]}]
+    (handle-load-error* reconciler load-request)))
 
 (Defn queue-loads! [reconciler env]
   [::fulcro-reconciler ::env => nil?]
@@ -793,11 +795,17 @@
 (s/def ::load-options map?)
 (s/def ::load (s/keys :opt [::query-key ::prim/component-class ::load-options]))
 (s/def ::queued-loads (s/coll-of ::load))
+(s/def ::post-event ::event-id)
+(s/def ::post-event-params map?)
+(s/def ::fallback-event-params map?)
 
-(defn- convert-load-options [env options]
+(Defn convert-load-options
+  "INTERNAL: Convert SM load options into Fulcro load options."
+  [env options]
+  [::env (s/keys :opt [::post-event ::post-event-params ::fallback-event ::fallback-event-params]) => map?]
   (let [{::keys [post-event post-event-params fallback-event fallback-event-params]} options
         {:keys [marker]} options
-        marker  (if (nil? marker) false marker) ; force marker to false if it isn't set
+        marker  (if (nil? marker) false marker)             ; force marker to false if it isn't set
         {::keys [asm-id]} env
         options (-> (dissoc options ::post-event ::post-event-params ::fallback-event ::fallback-event-params ::prim/component-class)
                   (assoc :marker marker :abort-id asm-id :fallback `handle-load-error :post-mutation-params (merge post-event-params {::asm-id asm-id}))

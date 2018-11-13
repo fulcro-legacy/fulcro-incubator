@@ -323,6 +323,53 @@
 
           (uism/queue-mutations! (prim/reconciler {}) menv1)))))
 
+  (specification "convert-load-options"
+    (let [load-options (uism/convert-load-options env {::prim/component-class AClass ::uism/post-event :blah})]
+      (assertions
+        "always sets a fallback function (that will send a default load-error event)"
+        (:fallback load-options) => `uism/handle-load-error
+        "removes any of the UISM-specific options from the map"
+        (contains? load-options ::prim/component-class) => false
+        (contains? load-options ::uism/post-event) => false
+        "defaults load markers to an explicit false"
+        (false? (:marker load-options)) => true))
+    (let [load-options (uism/convert-load-options env {::uism/post-event :blah})]
+      (assertions
+        "Sets the post event handler and post event if there is a post-event"
+        (-> load-options :post-mutation-params ::uism/event-id) => :blah
+        (:post-mutation load-options) => `uism/trigger-state-machine-event))
+    (let [load-options (uism/convert-load-options env {::uism/fallback-event        :foo
+                                                       ::uism/fallback-event-params {:y 1}})]
+      (assertions
+        "Sets fallback event and params if present"
+        (-> load-options :post-mutation-params ::uism/error-event) => :foo
+        (-> load-options :post-mutation-params ::uism/error-data) => {:y 1})))
+
+  (specification "handle-load-error*"
+    (behavior "When there is an error event in the original load request (post mutation params)"
+      (when-mocking
+        (uism/defer f) => (f)
+        (prim/transact! r tx) => (let [{:keys [params]} (-> tx prim/query->ast1)
+                                       {::uism/keys [event-id event-data asm-id]} params]
+                                   (assertions
+                                     "it triggers that event with the error data"
+                                     event-id => :foo
+                                     event-data => {:y 1}
+                                     asm-id => :fake))
+        (uism/handle-load-error* (prim/reconciler {}) {:post-mutation-params {::uism/asm-id      :fake
+                                                                              ::uism/error-event :foo
+                                                                              ::uism/error-data  {:y 1}}})))
+    (behavior "When the error event is not present in the original load request (post mutation params)"
+      (when-mocking
+        (uism/defer f) => (f)
+        (prim/transact! r tx) => (let [{:keys [params]} (-> tx prim/query->ast1)
+                                       {::uism/keys [event-id event-data asm-id]} params]
+                                   (assertions
+                                     "it triggers ::uism/load-error"
+                                     event-id => ::uism/load-error
+                                     asm-id => :fake))
+        (uism/handle-load-error* (prim/reconciler {}) {:post-mutation-params {::uism/asm-id :fake}}))))
+
   (specification "queue-actor-load!"
     (let [reconciler   (prim/reconciler {})
           env          (assoc env ::uism/queued-loads [])
