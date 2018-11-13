@@ -1,5 +1,7 @@
 (ns fulcro.incubator.ui-state-machines-test
   (:require
+    #?(:cljs ["enzyme" :refer [configure]])
+    #?(:cljs ["enzyme-adapter-react-16" :as Adapter])
     [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [fulcro-spec.core :refer [specification provided provided! when-mocking when-mocking! behavior assertions component]]
@@ -12,6 +14,11 @@
     [fulcro.incubator.ui-state-machines :as uism]
     [fulcro.incubator.test-helpers :as th]
     [taoensso.timbre :as log]))
+
+#?(:cljs
+   (defonce enzyme-config
+     (do
+       (configure #js {:adapter (new Adapter)}))))
 
 (declare => =1x=>)
 
@@ -493,7 +500,7 @@
   (specification "derive-actor-idents" :focused
     (let [actual (uism/derive-actor-idents {:a [:x 1]
                                             :b AClass
-                                            ; :c (th/mock-component AClass {})
+                                            :c (th/mock-component AClass {})
                                             :d (uism/with-actor-class [:A 1] AClass)})]
       (assertions
         "allows a bare ident"
@@ -504,9 +511,9 @@
         (:b actual) => [:A 1]
         (-> actual :b meta ::uism/class) => AClass
         ;; Need enzyme configured consistently for this test
-        ;"remembers the class of a react instance"
-        ;(:c actual) => [:A 1]
-        ;(-> actual :c meta ::uism/class) => AClass
+        "remembers the class of a react instance"
+        (:c actual) => [:A 1]
+        (-> actual :c meta ::uism/class) => AClass
         "remembers an explicity 'with'"
         (-> actual :d meta ::uism/class) => AClass)))
   (specification "set-timeout"
