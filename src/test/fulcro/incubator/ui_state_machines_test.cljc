@@ -1,5 +1,7 @@
 (ns fulcro.incubator.ui-state-machines-test
   (:require
+    #?(:cljs ["enzyme" :refer [configure]])
+    #?(:cljs ["enzyme-adapter-react-16" :as Adapter])
     [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [fulcro-spec.core :refer [specification provided provided! when-mocking when-mocking! behavior assertions component]]
@@ -12,6 +14,11 @@
     [fulcro.incubator.ui-state-machines :as uism]
     [fulcro.incubator.test-helpers :as th]
     [taoensso.timbre :as log]))
+
+#?(:cljs
+   (defonce enzyme-config
+     (do
+       (configure #js {:adapter (new Adapter)}))))
 
 (declare => =1x=>)
 
@@ -323,6 +330,53 @@
 
           (uism/queue-mutations! (prim/reconciler {}) menv1)))))
 
+  (specification "convert-load-options"
+    (let [load-options (uism/convert-load-options env {::prim/component-class AClass ::uism/post-event :blah})]
+      (assertions
+        "always sets a fallback function (that will send a default load-error event)"
+        (:fallback load-options) => `uism/handle-load-error
+        "removes any of the UISM-specific options from the map"
+        (contains? load-options ::prim/component-class) => false
+        (contains? load-options ::uism/post-event) => false
+        "defaults load markers to an explicit false"
+        (false? (:marker load-options)) => true))
+    (let [load-options (uism/convert-load-options env {::uism/post-event :blah})]
+      (assertions
+        "Sets the post event handler and post event if there is a post-event"
+        (-> load-options :post-mutation-params ::uism/event-id) => :blah
+        (:post-mutation load-options) => `uism/trigger-state-machine-event))
+    (let [load-options (uism/convert-load-options env {::uism/fallback-event        :foo
+                                                       ::uism/fallback-event-params {:y 1}})]
+      (assertions
+        "Sets fallback event and params if present"
+        (-> load-options :post-mutation-params ::uism/error-event) => :foo
+        (-> load-options :post-mutation-params ::uism/error-data) => {:y 1})))
+
+  (specification "handle-load-error*"
+    (behavior "When there is an error event in the original load request (post mutation params)"
+      (when-mocking
+        (uism/defer f) => (f)
+        (prim/transact! r tx) => (let [{:keys [params]} (-> tx prim/query->ast1)
+                                       {::uism/keys [event-id event-data asm-id]} params]
+                                   (assertions
+                                     "it triggers that event with the error data"
+                                     event-id => :foo
+                                     event-data => {:y 1}
+                                     asm-id => :fake))
+        (uism/handle-load-error* (prim/reconciler {}) {:post-mutation-params {::uism/asm-id      :fake
+                                                                              ::uism/error-event :foo
+                                                                              ::uism/error-data  {:y 1}}})))
+    (behavior "When the error event is not present in the original load request (post mutation params)"
+      (when-mocking
+        (uism/defer f) => (f)
+        (prim/transact! r tx) => (let [{:keys [params]} (-> tx prim/query->ast1)
+                                       {::uism/keys [event-id event-data asm-id]} params]
+                                   (assertions
+                                     "it triggers ::uism/load-error"
+                                     event-id => ::uism/load-error
+                                     asm-id => :fake))
+        (uism/handle-load-error* (prim/reconciler {}) {:post-mutation-params {::uism/asm-id :fake}}))))
+
   (specification "queue-actor-load!"
     (let [reconciler   (prim/reconciler {})
           env          (assoc env ::uism/queued-loads [])
@@ -401,6 +455,7 @@
   (specification "trigger-state-machine-event mutation"
     (let [{:keys [action]} (m/mutate {:reconciler :r} `uism/trigger-state-machine-event {:params true})]
       (when-mocking!
+        (uism/defer f) => (f)
         (uism/trigger-state-machine-event! mutation-env p) => (do
                                                                 (assertions
                                                                   "runs the state machine event"
@@ -446,7 +501,7 @@
   (specification "derive-actor-idents" :focused
     (let [actual (uism/derive-actor-idents {:a [:x 1]
                                             :b AClass
-                                            ; :c (th/mock-component AClass {})
+                                            :c (th/mock-component AClass {})
                                             :d (uism/with-actor-class [:A 1] AClass)})]
       (assertions
         "allows a bare ident"
@@ -457,9 +512,9 @@
         (:b actual) => [:A 1]
         (-> actual :b meta ::uism/class) => AClass
         ;; Need enzyme configured consistently for this test
-        ;"remembers the class of a react instance"
-        ;(:c actual) => [:A 1]
-        ;(-> actual :c meta ::uism/class) => AClass
+        "remembers the class of a react instance"
+        (:c actual) => [:A 1]
+        (-> actual :c meta ::uism/class) => AClass
         "remembers an explicity 'with'"
         (-> actual :d meta ::uism/class) => AClass)))
   (specification "set-timeout"

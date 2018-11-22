@@ -387,19 +387,21 @@
     (defer #(df/load reconciler query-key component-class load-options)))
   nil)
 
-(defmutation handle-load-error [_]
-  (action [{:keys [reconciler load-request]}]
-    (let [{::keys [asm-id error-event error-data]} (some-> load-request :post-mutation-params)]
-      (if (and asm-id error-event)
+(defn handle-load-error* [reconciler load-request]
+  (let [{::keys [asm-id error-event error-data]} (some-> load-request :post-mutation-params)]
+    (if (and asm-id error-event)
+      (defer
+        #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
+                                                                           ::event-id error-event}
+                                                                    error-data (assoc ::event-data error-data)))]))
+      (do
+        (log/debug "A fallback occurred, but no event was defined by the client. Sending generic event.")
         (defer
           #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
-                                                                             ::event-id error-event}
-                                                                      error-data (assoc ::event-data error-data)))]))
-        (do
-          (log/debug "A fallback occurred, but no event was defined by the client. Sending generic event.")
-          (defer
-            #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
-                                                                               ::event-id ::load-error}))])))))))
+                                                                             ::event-id ::load-error}))]))))))
+(defmutation handle-load-error [_]
+  (action [{:keys [reconciler load-request]}]
+    (handle-load-error* reconciler load-request)))
 
 (Defn queue-loads! [reconciler env]
   [::fulcro-reconciler ::env => nil?]
@@ -576,7 +578,10 @@
     (log/debug "Triggering state machine event " event-id)
     (let [to-refresh (trigger-state-machine-event! env params)]
       (log/debug "Queuing actor refreshes" to-refresh)
-      (fcip/queue! reconciler to-refresh))
+      ;; IF this is triggered from a post-mutation event and more than a request-animation-frame amount of time has
+      ;; elapsed THEN we have NO access to doing remoting (from post mutations), but the call to queue will end up
+      ;; running a React render on THIS thread, and any mutations/loads within React lifecycle methods will be lost.
+      (defer #(fcip/queue! reconciler to-refresh)))
     true))
 
 (defn set-string!
@@ -793,11 +798,17 @@
 (s/def ::load-options map?)
 (s/def ::load (s/keys :opt [::query-key ::prim/component-class ::load-options]))
 (s/def ::queued-loads (s/coll-of ::load))
+(s/def ::post-event ::event-id)
+(s/def ::post-event-params map?)
+(s/def ::fallback-event-params map?)
 
-(defn- convert-load-options [env options]
+(Defn convert-load-options
+  "INTERNAL: Convert SM load options into Fulcro load options."
+  [env options]
+  [::env (s/keys :opt [::post-event ::post-event-params ::fallback-event ::fallback-event-params]) => map?]
   (let [{::keys [post-event post-event-params fallback-event fallback-event-params]} options
         {:keys [marker]} options
-        marker  (if (nil? marker) false marker) ; force marker to false if it isn't set
+        marker  (if (nil? marker) false marker)             ; force marker to false if it isn't set
         {::keys [asm-id]} env
         options (-> (dissoc options ::post-event ::post-event-params ::fallback-event ::fallback-event-params ::prim/component-class)
                   (assoc :marker marker :abort-id asm-id :fallback `handle-load-error :post-mutation-params (merge post-event-params {::asm-id asm-id}))
@@ -858,3 +869,17 @@
      (update env ::queued-loads (fnil conj []) (cond-> {::actor-name   actor-name
                                                         ::load-options options}
                                                  component-class (assoc ::prim/component-class component-class))))))
+
+(defn apply-action
+  "Run a mutation helper function (e.g. a fn of Fulcro state)."
+  [env mutation-helper & args]
+  [::env fn? (s/* any?) => ::env]
+  (apply update env ::state-map mutation-helper args))
+
+(defn get-active-state
+  "Get the name of the active state for an active state machine using a component."
+  [this asm-id]
+  (-> (prim/component->state-map this)
+    ::asm-id
+    (get asm-id)
+    ::active-state))

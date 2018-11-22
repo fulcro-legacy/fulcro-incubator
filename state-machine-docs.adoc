@@ -183,6 +183,15 @@ do things like diagram your state machine from seeing that transition.  If you u
 `activate` in the `handler` then the *`handler` wins*.  This is typically used when you'd like a given (exceptional) condition
 to cause the state machine to finish and exit (or go to some alternate state).
 
+The predicate is useful for a few reasons:
+
+. You may have a condition that should short-circuit triggers of numerous events.  Without the predicate you'd
+have to code an `if` into each handler.
+. The helper functions that set state (e.g. `set-string!`) apply state changes before your handler.  Under
+certain circumstances you'd like to avoid that.  If predicate is `false`, then these events (as per the rules
+above) are *not* applied.
+
+
 === Option 2 -- A Single Handler
 
 This format of defining the states allows you to write just one function, but is not normally recommended, as it
