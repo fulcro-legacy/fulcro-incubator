@@ -870,8 +870,16 @@
                                                         ::load-options options}
                                                  component-class (assoc ::prim/component-class component-class))))))
 
-(Defn apply-action
+(defn apply-action
   "Run a mutation helper function (e.g. a fn of Fulcro state)."
   [env mutation-helper & args]
   [::env fn? (s/* any?) => ::env]
   (apply update env ::state-map mutation-helper args))
+
+(defn get-active-state
+  "Get the name of the active state for an active state machine using a component."
+  [this asm-id]
+  (-> (prim/component->state-map this)
+    ::asm-id
+    (get asm-id)
+    ::active-state))
