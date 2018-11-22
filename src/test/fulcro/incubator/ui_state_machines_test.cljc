@@ -455,6 +455,7 @@
   (specification "trigger-state-machine-event mutation"
     (let [{:keys [action]} (m/mutate {:reconciler :r} `uism/trigger-state-machine-event {:params true})]
       (when-mocking!
+        (uism/defer f) => (f)
         (uism/trigger-state-machine-event! mutation-env p) => (do
                                                                 (assertions
                                                                   "runs the state machine event"

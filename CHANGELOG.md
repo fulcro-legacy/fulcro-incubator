@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.18
+------
+- Fixed a race condition on React lifecycles when using state machines that could lose loads.
+
 0.0.17
 ------
 - Added fallback support for loads

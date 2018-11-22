@@ -578,7 +578,10 @@
     (log/debug "Triggering state machine event " event-id)
     (let [to-refresh (trigger-state-machine-event! env params)]
       (log/debug "Queuing actor refreshes" to-refresh)
-      (fcip/queue! reconciler to-refresh))
+      ;; IF this is triggered from a post-mutation event and more than a request-animation-frame amount of time has
+      ;; elapsed THEN we have NO access to doing remoting (from post mutations), but the call to queue will end up
+      ;; running a React render on THIS thread, and any mutations/loads within React lifecycle methods will be lost.
+      (defer #(fcip/queue! reconciler to-refresh)))
     true))
 
 (defn set-string!
@@ -866,3 +869,9 @@
      (update env ::queued-loads (fnil conj []) (cond-> {::actor-name   actor-name
                                                         ::load-options options}
                                                  component-class (assoc ::prim/component-class component-class))))))
+
+(Defn apply-action
+  "Run a mutation helper function (e.g. a fn of Fulcro state)."
+  [env mutation-helper & args]
+  [::env fn? (s/* any?) => ::env]
+  (apply update env ::state-map mutation-helper args))
