@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.19
+------
+- Removed accidental use of timbre
+- Dropped the use of Defn for function specs for the moment.
+
 0.0.18
 ------
 - Fixed a race condition on React lifecycles when using state machines that could lose loads.
