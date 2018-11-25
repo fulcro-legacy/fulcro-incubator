@@ -13,7 +13,7 @@
     [nubank.workspaces.lib.fulcro-portal :as f.portal]
     [nubank.workspaces.model :as wsm]
     [fulcrologic.semantic-ui.factories :as sui]
-    [taoensso.timbre :as log]
+    [fulcro.logging :as log]
     [fulcro.incubator.ui-state-machines :as uism]
     [fulcro.events :as evt]))
 
