@@ -235,8 +235,10 @@ Fulcro state) after the results of the handler are processed.
 bit of data while your state machine is running.
 `(uism/retrieve env k)`:: Get state-machine local value.
 
-There are numerous other helpers, but these suffice to build pretty powerful state machines.
+There are numerous other helpers, including:
 
+`(apply-action env (fn [state-map] state-map))`:: use a fn of state-map to apply some mutation helper via a SM env. The return value of the function will become the new state in the env and will be applied when the handler returns.
+ `(get-active-state this asm-id)`:: Read the “current state name” from an active state machine while in a UI component (e.g. via `this`).
 
 
 == Using State Machines from the UI
