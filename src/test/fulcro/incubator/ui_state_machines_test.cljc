@@ -13,7 +13,7 @@
     [fulcro.incubator.pessimistic-mutations :as pm]
     [fulcro.incubator.ui-state-machines :as uism]
     [fulcro.incubator.test-helpers :as th]
-    [taoensso.timbre :as log]))
+    ))
 
 #?(:cljs
    (defonce enzyme-config
@@ -74,15 +74,11 @@
       (-> env
         (uism/activate :A)
         (uism/asm-value ::uism/active-state)) => :A)
-    (when-mocking
-      (log/-log! _ _ _ _ _ _ _ msg _ _) =1x=> (assertions "Logs an error"
-                                                (force msg) => ["Activate called for invalid state: " :crap])
-
-      (assertions
-        "Ignores a requst to move to an invalid state (logs an error)"
-        (-> env
-          (uism/activate :crap)
-          (uism/asm-value ::uism/active-state)) => :initial)))
+    (assertions
+      "Ignores a requst to move to an invalid state (logs an error)"
+      (-> env
+        (uism/activate :crap)
+        (uism/asm-value ::uism/active-state)) => :initial))
 
   (specification "store/retrieve"
     (assertions
@@ -124,15 +120,11 @@
         (uism/actor-value :dialog :boo)) => 42))
 
   (specification "alias-value"
-    (when-mocking
-      (log/-log! _ _ _ _ _ _ _ msg _ _) =1x=> (assertions "Logs an error"
-                                                (force msg) => ["Unable to find alias in state machine:" :name])
-
-      (assertions
-        "Returns nil if the alias isn't valid"
-        (uism/alias-value env :name) => nil
-        "Gets the value of the fulro state that the alias refers to"
-        (uism/alias-value env :username) => "Joe")))
+    (assertions
+      "Returns nil if the alias isn't valid"
+      (uism/alias-value env :name) => nil
+      "Gets the value of the fulro state that the alias refers to"
+      (uism/alias-value env :username) => "Joe"))
 
   (specification "set-aliased-value"
     (assertions
@@ -152,20 +144,16 @@
         (uism/set-aliased-value :title "Hello" :username "Joe" :visible? :booga)
         (uism/alias-value :visible?)) => :booga)
 
-    (when-mocking
-      (log/-log! _ _ _ _ _ _ _ msg _ _) =1x=> (assertions "Logs an error"
-                                                (force msg) => ["Attempt to set a value on an invalid alias:" :name])
-
-      (assertions
-        "Returns unmodified env if the alias isn't valid"
-        (uism/set-aliased-value env :name "Sam") => env
-        "Sets the value in the fulro state that the alias refers to"
-        (-> env
-          (uism/set-aliased-value :username "Sam")
-          ::uism/state-map
-          :TABLE
-          (get 1)
-          :name) => "Sam")))
+    (assertions
+      "Returns unmodified env if the alias isn't valid"
+      (uism/set-aliased-value env :name "Sam") => env
+      "Sets the value in the fulro state that the alias refers to"
+      (-> env
+        (uism/set-aliased-value :username "Sam")
+        ::uism/state-map
+        :TABLE
+        (get 1)
+        :name) => "Sam"))
 
   (specification "aliased-data"
     (assertions
@@ -198,9 +186,6 @@
                                   e => env
                                   k => ::uism/active-state)
                                 :boo)
-
-      (log/-log! _ _ _ _ _ _ _ msg _ _) =1x=> (assertions "Logs an error"
-                                                (force msg) => ["UNEXPECTED EVENT: Did not find a way to handle event" nil "in the current active state:" :boo])
 
       (assertions
         "returns core identity"
@@ -325,8 +310,6 @@
         (when-mocking!
           (uism/actor->ident e actor) =1x=> [:actor 1]
           (prim/ref->any r i) =1x=> nil
-          (log/-log! _ _ _ _ _ _ _ msg _ _) =1x=> (assertions "Logs an error"
-                                                    (first (force msg)) =fn=> #(str/includes? % "Cannot run"))
 
           (uism/queue-mutations! (prim/reconciler {}) menv1)))))
 
