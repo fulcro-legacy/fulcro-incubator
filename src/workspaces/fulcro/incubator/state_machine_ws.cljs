@@ -170,11 +170,12 @@
 
 (def ui-login-form (prim/factory LoginForm {:keyfn :db/id}))
 
-(defsc Dialog [_ {:keys [ui/active? dialog/form]}]
+(defsc Dialog [this {:keys [ui/active? dialog/form]}]
   {:query         [:ui/active? {:dialog/form (prim/get-query LoginForm)}]
    :ident         (fn [] [:COMPONENT/by-id ::dialog])
    :initial-state {:ui/active? false :dialog/form {}}}
-  (sui/ui-modal {:open active?}
+  (sui/ui-modal {:open    active? :closeIcon true :closeOnDimmerClick true :closeOnDocumentClick true
+                 :onClose (fn [] (uism/trigger! this ::loginsm ::uism/exit))}
     (sui/ui-modal-header {} "Login")
     (sui/ui-modal-content {}
       (ui-login-form form))))
