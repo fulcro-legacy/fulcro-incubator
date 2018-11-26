@@ -175,7 +175,7 @@
     tx))
 
 (defn pmutate!
-  "Run a pmutation defined by `defpmutation`.
+  "Run a pessimistic mutation (one that has ok-action and error-action sections).
 
   this - The component whose ident will be used for status reporting on the progress of the mutation.
   mutation - The symbol of the mutation you want to run OR the mutation declaration name (using mutation-interface).

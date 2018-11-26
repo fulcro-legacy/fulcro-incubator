@@ -733,6 +733,7 @@
       {(or mutation-remote :remote) (pm/pessimistic-mutation env)}
       (let [sm-env      (state-machine-env @state nil asm-id ok-event ok-data)
             actor-ident (actor->ident sm-env mutation-context)
+            to-refresh (ui-refresh-list sm-env)
             abort-id    (:abort-id mp)
             fixed-env   (-> env
                           (assoc :ref actor-ident)
@@ -743,8 +744,9 @@
                             :params (dissoc mp ::ok-event ::error-event ::mutation
                                       ::mutation-context ::ok-data ::error-data
                                       ::mutation-remote ::asm-id)))]
-        (log/debug "explcit remote is " mutation-remote)
-        (cond-> {(or mutation-remote :remote) (pm/pessimistic-mutation fixed-env)}
+        (log/debug "explicit remote is " mutation-remote)
+        (cond-> {:refresh to-refresh
+                 (or mutation-remote :remote) (pm/pessimistic-mutation fixed-env)}
           ok-event (assoc :ok-action (fn [] (mtrigger! fixed-env actor-ident asm-id ok-event ok-data)))
           error-event (assoc :error-action (fn [] (mtrigger! fixed-env actor-ident asm-id error-event error-data))))))))
 

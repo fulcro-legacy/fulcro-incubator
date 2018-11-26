@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.20
+------
+- Added proper ident refresh list for remote mutations to ensure UI refresh
+
 0.0.19
 ------
 - Removed accidental use of timbre
