@@ -45,9 +45,9 @@ then the valid (sub)routes might have paths "/settings" and "/user/1". Perhaps t
                    (df/load reconciler target-ident User
                      {:post-mutation `routing/ready
                       :post-mutation-params {:pending-target target-ident}})
-                   ;; must return the ident that will be the target, or a "wait to eventually route" to an ident
+                   ;; Return either an immediate instruction of the ident to use in app state for the route:
                    ;; (r/route-immediate target-ident)
-                   ;; OR
+                   ;; OR an instruction to defer routing, but still include the *eventual* target:
                    (r/route-deferred target-ident)))
                RouteLifecycle ; non-static
                ;; can return false to prevent a route change
