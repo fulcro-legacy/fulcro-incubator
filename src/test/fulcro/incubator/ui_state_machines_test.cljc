@@ -429,11 +429,43 @@
 
              (uism/ui-refresh-list env) => [:x :y]
 
+             (uism/trigger-queued-events! menv triggers list) =1x=> (do
+                                                                      (assertions
+                                                                        "processes events that handlers queued."
+                                                                        (count triggers) => 0)
+                                                                      list)
+
              ;; ACTION UNDER TEST
              (let [actual (uism/trigger-state-machine-event! mutation-env event)]
                (assertions
                  "returns the list of things to refresh in the UI"
                  actual => [:x :y])))))))
+
+  (specification "trigger-queued-events!"
+    (let [mutation-env {:state (atom {}) :ref [:A 1]}
+          event-1      {::uism/asm-id :a ::uism/event-id :event-1 ::uism/event-data {:a 1}}
+          event-2      {::uism/asm-id :b ::uism/event-id :event-2 ::uism/event-data {:a 2}}
+          triggers     [event-1 event-2]]
+      (when-mocking!
+        (uism/trigger-state-machine-event! menv event) =1x=> (do
+                                                               (assertions
+                                                                 "Triggers the queued event"
+                                                                 event => event-1
+                                                                 "with the mutation env"
+                                                                 menv => mutation-env)
+                                                               [[:b 2]])
+        (uism/trigger-state-machine-event! menv event) =1x=> (do
+                                                               (assertions
+                                                                 "Triggers the queued event"
+                                                                 event => event-2
+                                                                 "with the mutation env"
+                                                                 menv => mutation-env)
+                                                               [[:c 3]])
+
+        (let [actual (uism/trigger-queued-events! mutation-env triggers [[:A 1]])]
+          (assertions
+            "Accumulates and returns the actors to refresh"
+            actual => [[:A 1] [:b 2] [:c 3]])))))
 
   (specification "trigger-state-machine-event mutation"
     (let [{:keys [action]} (m/mutate {:reconciler :r} `uism/trigger-state-machine-event {:params true})]
