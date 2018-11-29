@@ -1,0 +1,66 @@
+= Routing Features
+
+Composition:: Routers should compose in a flexible manner that includes the easy ability to refactor the application and restructure.
+
+URI <-> Routes should be interpreted by the router UI structure itself::  Reshaping the URI can be done by transform optional functions that sit in-between location bar and code.
+
+There should be a way to run pessimistic operations *before* moving to a given route::  This should be a chain of operations that is derived from the target routers themselves (or their children?).
+
+UI Code should be able to prevent a route change::  E.g. say there are unsaved changes on some page in a tree: a UI component must be able to "hook into" the routing system in order to prevent changes. NOTE: This is not a feature of the *routers*, but a feature of the *content* under a router.  This can be modelled as a global concern, since routing (esp. that involves URI changes) is a global concern.
+
+== Questions
+
+Should we separate the concern of routing from the concerns of loading and URI interpretation?:: A router might know how to route between screens like User and Settings.  Those screens are *not* routers, but the router itself is concerned with interpreting the URI.  `/user/1` and `/settings` mean that the router itself needs to make a decision among screens, but the *screen itself* is the ultimate *consumer* of the URI data.
+
+
+== Thoughts
+
+Perhaps we are thinking about this in the wrong way.  It seems like a lot of the interesting logic is really specific to the screens *under* the router that are being routed *to*. If I have something like this:
+
+[ditaa, image=boo.jpg]
+....
+
+   +-------+
+   |Router |
+   +-+---+-+
+     |   |
+     |   +------+
+     |          |
+ +---+---+ +----+----+
+ |User   | |Settings |
+ +-------+ +---------+
+....
+
+then the valid (sub)routes might have paths "/settings" and "/user/1". Perhaps the router doesn't have pre-programmed logic at all, but instead is just given a list of possible targets (in this case `User` and `Settings`) and the router *asks* those components for their opinion on an incoming route. Thus a component might look like this:
+
+```
+(defsc User [this props]
+  {...
+   :ident [:user/id :user/id]
+   :initial-state (fn [params] ...)
+   :protocols [static RouteTarget
+               (route-segment [user-class] ["user" :user-id])
+               (will-enter [user-class reconciler {:keys [user-id]}]
+                 (let [target-ident [:user/id user-id]]
+                   (df/load reconciler target-ident User
+                     {:post-mutation `routing/ready
+                      :post-mutation-params {:pending-target target-ident}})
+                   ;; must return the ident that will be the target, or a "wait to eventually route" to an ident
+                   ;; (r/route-immediate target-ident)
+                   ;; OR
+                   (r/route-deferred target-ident)))
+               RouteLifecycle ; non-static
+               ;; can return false to prevent a route change
+               (will-leave [this props] ...return true/false...)
+  }
+  ...)
+
+;; concerns about passing initial state through router?  Which is the true initial route?
+(defrouter SomeRouter Settings User)
+
+(defsc Root [_ _]
+ {:query [{:router (prim/get-query SomeRouter)}]
+  :initial-state {:router {:x 1}} ; params passed *through* to default route (settings)
+  }
+ ...)
+```

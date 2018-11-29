@@ -160,3 +160,5 @@
      ::f.portal/wrap-root? false
      ::f.portal/app        {:started-callback (fn [{:keys [reconciler]}])
                             :networking       (server/new-server-emulator (server/fulcro-parser) 300)}}))
+
+
