@@ -15,7 +15,8 @@
     [fulcrologic.semantic-ui.factories :as sui]
     [fulcro.logging :as log]
     [fulcro.incubator.ui-state-machines :as uism]
-    [fulcro.events :as evt]))
+    [fulcro.events :as evt]
+    [fulcro.client.mutations :as m]))
 
 ;; ================================================================================
 ;; Sample REUSABLE Machine Definition
@@ -175,7 +176,7 @@
    :ident         (fn [] [:COMPONENT/by-id ::dialog])
    :initial-state {:ui/active? false :dialog/form {}}}
   (sui/ui-modal {:open    active? :closeIcon true :closeOnDimmerClick true :closeOnDocumentClick true
-                 :onClose (fn [] (uism/trigger! this ::loginsm ::uism/exit))}
+                 :onClose (fn [] (m/set-value! this :ui/active? false))}
     (sui/ui-modal-header {} "Login")
     (sui/ui-modal-content {}
       (ui-login-form form))))
@@ -234,3 +235,68 @@
      ::f.portal/wrap-root? false
      ::f.portal/app        {:started-callback (fn [app] (reset! my-app app))
                             :networking       {:remote (server/new-server-emulator (server/fulcro-parser) 100)}}}))
+
+(uism/defstatemachine A
+  {::uism/actor-names #{:a}
+   ::uism/aliases     {:x [:a :x]}
+   ::uism/states      {:initial
+                       {::uism/events {:go! {::uism/handler
+                                             (fn [{::uism/keys [event-data] :as env}]
+                                               (log/info "A go!" event-data)
+                                               (-> env
+                                                 (uism/trigger ::b :go! {:from-a 1})
+                                                 (uism/trigger ::d :go! {:from-a 2})))}}}}})
+
+(uism/defstatemachine B
+  {::uism/actor-names #{:a}
+   ::uism/aliases     {:x [:a :x]}
+   ::uism/states      {:initial
+                       {::uism/events {:go! {::uism/handler
+                                             (fn [{::uism/keys [event-data] :as env}]
+                                               (log/info "B go!" event-data)
+                                               (uism/trigger env ::c :go! {:from-b 1}))}}}}})
+
+(uism/defstatemachine C
+  {::uism/actor-names #{:a}
+   ::uism/aliases     {:x [:a :x]}
+   ::uism/states      {:initial
+                       {::uism/events {:go! {::uism/handler
+                                             (fn [{::uism/keys [event-data]}]
+                                               (log/info "C go!" event-data))}}}}})
+
+(uism/defstatemachine D
+  {::uism/actor-names #{:a}
+   ::uism/aliases     {:x [:a :x]}
+   ::uism/states      {:initial
+                       {::uism/events {:go! {::uism/handler
+                                             (fn [{::uism/keys [event-data]}]
+                                               (log/info "D go!" event-data))}}}}})
+
+(defsc CompA [this {:keys [:x] :as props}]
+  {:query         [:x]
+   :ident         (fn [] [:A 1])
+   :initial-state {:x 0}}
+  (dom/div nil "See console log for results. Nested trigger order should be A, B, C, D."))
+
+(def ui-comp-a (prim/factory CompA {:keyfn :db/id}))
+
+(defsc NestedTriggersRoot [this {:keys [:a] :as props}]
+  {:query         [{:a (prim/get-query CompA)}]
+   :initial-state {:a {}}}
+  (dom/div
+    (dom/button {:onClick (fn []
+                            (uism/begin! this A ::a {:a (uism/with-actor-class [:A 1] CompA)})
+                            (uism/begin! this B ::b {:a (uism/with-actor-class [:A 1] CompA)})
+                            (uism/begin! this C ::c {:a (uism/with-actor-class [:A 1] CompA)})
+                            (uism/begin! this D ::d {:a (uism/with-actor-class [:A 1] CompA)}))}
+      "Start State Machines")
+    (dom/button {:onClick (fn [] (uism/trigger! this ::a :go! {:root-data true}))} "Trigger nested event")
+    (ui-comp-a a)))
+
+(ws/defcard nested-trigger-card
+  {::wsm/card-width  4
+   ::wsm/align       {:flex 1}
+   ::wsm/card-height 4}
+  (ct.fulcro/fulcro-card
+    {::f.portal/root       NestedTriggersRoot
+     ::f.portal/wrap-root? false}))

@@ -64,8 +64,10 @@
 (s/def ::state-id keyword?)
 (s/def ::event-data map?)
 (s/def ::event-id keyword?)
+(s/def ::trigger-descriptor (s/keys :req [::asm-id ::event-id]))
+(s/def ::queued-triggers (s/coll-of ::trigger-descriptor))
 (s/def ::env (s/keys :req [::state-map ::asm-id]
-               :opt [::source-actor-ident ::event-id ::event-data
+               :opt [::source-actor-ident ::event-id ::event-data ::queued-triggers
                      ::queued-mutations ::queued-loads ::queued-timeouts]))
 
 (defn fake-handler [env] [::env => ::env] env)
@@ -549,6 +551,14 @@
       env
       (keys active-timers))))
 
+(declare trigger-state-machine-event!)
+
+(defn trigger-queued-events! [mutation-env queued-triggers refresh-list]
+  (reduce (fn [refresh-list event]
+            (into refresh-list (trigger-state-machine-event! mutation-env event)))
+    refresh-list
+    queued-triggers))
+
 (defn trigger-state-machine-event!
   "IMPLEMENTATION DETAIL. Low-level implementation of triggering a state machine event. Does no direct interaction with
   Fulcro UI refresh.  Use `trigger!` instead.
@@ -557,19 +567,35 @@
     component that was the source of the event.
   - params - The parameters for the event
 
-  Returns a vector of actor idents that should be refreshed. "
-  [{:keys [reconciler state ref]} {::keys [event-id event-data asm-id] :as params}]
-  (let [sm-env      (state-machine-env @state ref asm-id event-id event-data)
-        handler     (active-state-handler sm-env)
-        valued-env  (apply-event-value sm-env params)
-        handled-env (handler valued-env)
-        final-env   (as-> (or handled-env valued-env) e
-                      (clear-timeouts-on-event! e event-id)
-                      (schedule-timeouts! reconciler e))]
+  Returns a vector of actor idents that should be refreshed."
+  [{:keys [reconciler state ref] :as mutation-env} {::keys [event-id event-data asm-id] :as params}]
+  (let [sm-env       (state-machine-env @state ref asm-id event-id event-data)
+        handler      (active-state-handler sm-env)
+        valued-env   (apply-event-value sm-env params)
+        handled-env  (handler valued-env)
+        final-env    (as-> (or handled-env valued-env) e
+                       (clear-timeouts-on-event! e event-id)
+                       (schedule-timeouts! reconciler e))
+        refresh-list (ui-refresh-list final-env)]
     (queue-mutations! reconciler final-env)
     (queue-loads! reconciler final-env)
     (update-fulcro-state! final-env state)
-    (ui-refresh-list final-env)))
+    (trigger-queued-events! mutation-env (::queued-triggers final-env) refresh-list)))
+
+(defn trigger
+  "Trigger an event on another state machine.
+
+  `env` - is the env in a state machine handler
+  `state-machine-id` - The ID of the state machine you want to trigger an event on.
+  `event` - The event ID you want to send.
+  `event-data` - A map of data to send with the event
+
+  Returns the updated env.  The actual event will not be sent until this handler finishes."
+  ([env state-machine-id event] (trigger env state-machine-id event {}))
+  ([env state-machine-id event event-data]
+   (update env ::queued-triggers (fnil conj []) {::asm-id     state-machine-id
+                                                 ::event-id   event
+                                                 ::event-data event-data})))
 
 (defmutation trigger-state-machine-event
   "Mutation: Trigger an event on an active state machine"
@@ -733,7 +759,7 @@
       {(or mutation-remote :remote) (pm/pessimistic-mutation env)}
       (let [sm-env      (state-machine-env @state nil asm-id ok-event ok-data)
             actor-ident (actor->ident sm-env mutation-context)
-            to-refresh (ui-refresh-list sm-env)
+            to-refresh  (ui-refresh-list sm-env)
             abort-id    (:abort-id mp)
             fixed-env   (-> env
                           (assoc :ref actor-ident)
@@ -745,7 +771,7 @@
                                       ::mutation-context ::ok-data ::error-data
                                       ::mutation-remote ::asm-id)))]
         (log/debug "explicit remote is " mutation-remote)
-        (cond-> {:refresh to-refresh
+        (cond-> {:refresh                     to-refresh
                  (or mutation-remote :remote) (pm/pessimistic-mutation fixed-env)}
           ok-event (assoc :ok-action (fn [] (mtrigger! fixed-env actor-ident asm-id ok-event ok-data)))
           error-event (assoc :error-action (fn [] (mtrigger! fixed-env actor-ident asm-id error-event error-data))))))))

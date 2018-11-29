@@ -238,8 +238,7 @@ bit of data while your state machine is running.
 There are numerous other helpers, including:
 
 `(apply-action env (fn [state-map] state-map))`:: use a fn of state-map to apply some mutation helper via a SM env. The return value of the function will become the new state in the env and will be applied when the handler returns.
- `(get-active-state this asm-id)`:: Read the “current state name” from an active state machine while in a UI component (e.g. via `this`).
-
+`(get-active-state this asm-id)`:: Read the “current state name” from an active state machine while in a UI component (e.g. via `this`).
 
 == Using State Machines from the UI
 
@@ -418,6 +417,54 @@ The `cancel-on-events` parameter is a function that will be sent the name of any
 waiting. If it returns `true` then the timeout will be auto-cancelled.
 
 You can also explcitly cancel a timeout with `(uism/clear-timeout! env timer-id)
+
+== Sending Events FROM one State Machine to Another
+
+Version 0.0.21+ includes support for sending events from one state machine to another. The mechanism
+for doing so is the `trigger` method (no `!`). It takes and returns a handler `env`, and is composed
+into the threading of `env` in your handlers:
+
+```
+(fn [env]
+  (-> env
+    (uism/trigger :state-machine-id :event-id {:data :map})
+    ...))
+```
+
+This has the effect of queueing the event for after the current handler has finished.
+
+=== Nested Event Order
+
+State machines that trigger events may cause handlers to run that themselves trigger further events.
+The ordering of such a cascade will be that of function call semantics. That is to say that if state
+machine A triggers an event on B and D, and B triggers an event on C, then the runtime evaluation
+order will be A, B, C, D.
+
+=== State Machine ID Passing
+
+In order to keep your state machine definition free from coupling, you will not want to embed the ID of
+some state machine into the code of the handler (though you can certainly do so if you wish). It is
+instead recommended that you pass any necessary state machine IDs as event data on `begin!`:
+
+```
+(uism/begin! this SM ::sm-id actor-map {:other-machine :machine-id})
+```
+
+and add a handler for the `::uism/started` event that extracts this data and stores it in the
+state machine's local store:
+
+```
+(uism/defstatemachine SM
+  {...
+   ::uism/states      {:initial
+                       {::uism/events
+                        {:uism/started
+                         {::uism/handler
+                          (fn [{::uism/keys [event-data] :as env}]
+                            (let [{:keys [other-machine]} event-data]
+                              (-> env
+                                (uism/store :mid other-machine))))}}}}})
+```
 
 == Aborting Loads and Mutations
 

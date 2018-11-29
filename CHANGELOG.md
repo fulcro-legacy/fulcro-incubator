@@ -1,8 +1,13 @@
 # Change Log
 
+0.0.21
+------
+- Added the ability to trigger events on other state machines from within a handler.
+
 0.0.20
 ------
 - Added proper ident refresh list for remote mutations to ensure UI refresh
+- Added apply-action and get-active-state
 
 0.0.19
 ------
