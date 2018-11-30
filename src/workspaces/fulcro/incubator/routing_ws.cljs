@@ -168,7 +168,7 @@
 ;; Routing experiment 2 (see adoc file)
 ;; ================================================================================
 
-(declare User Settings Root2 RootRouter2)
+(declare User Settings Root2 RootRouter2 SettingsPaneRouter Pane1 Pane2)
 
 ;; STATIC protocol.
 (defprotocol RouteTarget
@@ -201,8 +201,8 @@
 (defn immediate? [ident] (some-> ident meta :immediate))
 
 (defn- apply-route* [state-map {:keys [router target]}]
-  (let [router-class (log/spy :info (-> router meta :component))
-        target-class (log/spy :info (-> target meta :component))]
+  (let [router-class (-> router meta :component)
+        target-class (-> target meta :component)]
     (-> state-map
       (assoc-in (conj router ::current-route) target)
       (update-in router dissoc ::pending-route)
@@ -217,13 +217,12 @@
                               (reduced (::id r))))
                     nil
                     routers)]
-    (if (log/spy :info router-id)
+    (if router-id
       (apply-route* state-map (get-in state-map [::id router-id ::pending-route]))
       state-map)))
 
 (defmutation target-ready [{:keys [target]}]
   (action [{:keys [state]}]
-    (log/info "Target ready " target)
     (swap! state target-ready* target))
   (refresh [_] [::current-route]))
 
@@ -313,12 +312,16 @@
     (some ast-node-for-route children)))
 
 (deftest ast-node-for-route-test
-  (let [ast (prim/query->ast (prim/get-query Root2))]
+  (let [ast          (prim/query->ast (prim/get-query Root2))
+        settings-ast (prim/query->ast (prim/get-query Settings))]
     (assertions
       "returns nil for invalid routes"
       (ast-node-for-route ast ["booga"]) => nil
       "Can find the router for a given path"
-      (:component (ast-node-for-route ast ["user" "1"])) => RootRouter2)))
+      (:component (ast-node-for-route ast ["user" "1"])) => RootRouter2
+
+      (:component (ast-node-for-route settings-ast ["pane1"])) => SettingsPaneRouter
+      (:component (ast-node-for-route settings-ast ["pane2"])) => SettingsPaneRouter)))
 
 (defmutation apply-route
   "Mutation: Indicate that a given route is ready and should show the result.
@@ -364,34 +367,77 @@
       (loop [{:keys [component]} root path new-route]
         (when (and component (router? component))
           (let [{:keys [target matching-prefix]} (route-target component path)
+                target-ast     (some-> target (prim/get-query state-map) prim/query->ast)
                 prefix-length  (count matching-prefix)
                 remaining-path (vec (drop prefix-length path))
-                segment        (route-segment (log/spy :info target))
+                segment        (route-segment target)
                 params         (reduce
                                  (fn [p [k v]] (if (keyword? k) (assoc p k v) p))
                                  {}
                                  (map (fn [a b] [a b]) segment matching-prefix))
                 router-ident   (prim/get-ident component {})
-                target-ident   (will-enter target reconciler (log/spy :info params))]
+                target-ident   (will-enter target reconciler params)]
             (if (immediate? target-ident)
               (swap! route-tx into `[(apply-route ~{:router (with-meta router-ident {:component component})
-                                                    :target (with-meta target-ident {:component target})}) ~router-ident])
+                                                    :target (with-meta target-ident {:component target})})])
               (swap! route-tx into `[(mark-route-pending ~{:router (with-meta router-ident {:component component})
                                                            :target (with-meta target-ident {:component target})})]))
             (when (seq remaining-path)
-              (recur (ast-node-for-route root remaining-path) remaining-path)))))
-      (prim/transact! reconciler (log/spy :info @route-tx)))))
+              (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))
+      ;; TASK: Cancel pending routes before potentially adding new ones...send user a route cancelled message.
+      (prim/transact! reconciler (log/spy :info (into [::current-route] @route-tx))))))
 
-(defsc Settings [this {:keys [:x] :as props}]
+(defsc Pane1 [this {:keys [:y] :as props}]
+  {:query         [:y]
+   :ident         (fn [] [:COMPONENT/by-id :pane1])
+   :initial-state {:y 1}
+   :protocols     [static RouteTarget
+                   (route-segment [_] ["pane1"])
+                   (will-enter [_ _ _] (route-immediate [:COMPONENT/by-id :pane1]))
+                   RouteLifecycle
+                   (will-leave [this props] true)]}
+  (dom/div (str "PANE 1")))
+
+(defsc Pane2 [this {:keys [:x] :as props}]
   {:query         [:x]
+   :ident         (fn [] [:COMPONENT/by-id :pane2])
+   :initial-state {:x 1}
+   :protocols     [static RouteTarget
+                   (route-segment [_] ["pane2"])
+                   (will-enter [_ _ _] (route-immediate [:COMPONENT/by-id :pane2]))
+                   RouteLifecycle
+                   (will-leave [this props] true)]}
+  (dom/div (str "PANE 2")))
+
+(defsc SettingsPaneRouter [this {::keys [id current-route] :as props}]
+  ;; TASK: fix initial state hack
+  {:query         [::id {::current-route (prim/get-query Pane1)} {::b (prim/get-query Pane2)}]
+   :ident         (fn [] [::id "SettingsPaneRouter"])
+   :protocols     [static Router (get-targets [c] #{Pane1 Pane2})]
+   :initial-state (fn [params]
+                    {::id            "SettingsPaneRouter"
+                     ::b             (prim/get-initial-state Pane2 {})
+                     ::current-route (prim/get-initial-state Pane1 params)})}
+  (if-let [class (current-route-class this)]
+    (let [factory (prim/factory class)]
+      (factory current-route))
+    (dom/div "Internal Router error. No current route.")))
+
+(def ui-settings-pane-router (prim/factory SettingsPaneRouter))
+
+(defsc Settings [this {:keys [:x :panes] :as props}]
+  {:query         [:x {:panes (prim/get-query SettingsPaneRouter)}]
    :ident         (fn [] [:COMPONENT/by-id :settings])
-   :initial-state {:x :param/x}
+   :initial-state {:x     :param/x
+                   :panes {}}
    :protocols     [static RouteTarget
                    (route-segment [_] ["settings"])
                    (will-enter [_ _ _] (route-immediate [:COMPONENT/by-id :settings]))
                    RouteLifecycle
                    (will-leave [this props] true)]}
-  (dom/div (str "Settings: x = " x)))
+  (dom/div
+    (str "Settings: x = " x)
+    (ui-settings-pane-router panes)))
 
 (defsc User [this {:keys [user/id user/name] :as props}]
   {:query     [:user/id :user/name]
@@ -431,9 +477,9 @@
     (dom/button {:onClick (fn []
                             (change-route this ["user" 1])
                             )} "Change route to /user/1")
-    (dom/button {:onClick (fn []
-                            (change-route this ["settings"])
-                            )} "Change route to /settings")
+    (dom/button {:onClick (fn [] (change-route this ["settings"]))} "Change route to /settings")
+    (dom/button {:onClick (fn [] (change-route this ["settings" "pane1"]))} "Change route to /settings/pane1")
+    (dom/button {:onClick (fn [] (change-route this ["settings" "pane2"]))} "Change route to /settings/pane2")
     (ui-root-router-2 router)))
 
 (server/defquery-entity :user/id
