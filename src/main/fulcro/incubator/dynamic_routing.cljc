@@ -71,31 +71,37 @@
 (defn route-deferred [ident] (with-meta ident {:immediate false}))
 (defn immediate? [ident] (some-> ident meta :immediate))
 
-(defn- apply-route* [state-map {:keys [router target]}]
+(defn- apply-route* [state-map {:keys [router target] :as params}]
+  (log/info "Apply route " params)
   (let [router-class (-> router meta :component)
+        router-id    (second router)
         target-class (-> target meta :component)]
     (-> state-map
       (assoc-in (conj router ::current-route) target)
       (update-in router dissoc ::pending-route)
-      (prim/set-query* router-class {:query [::id {::current-route (prim/get-query target-class state-map)}]}))))
+      (prim/set-query* router-class {:query [::id [::uism/asm-id router-id] {::current-route (prim/get-query target-class state-map)}]}))))
 
-(defn target-ready*
-  "Mutation helper: apply any pending route segment that has the `target` ident."
-  [state-map target]
+(defn router-for-pending-target [state-map target]
   (let [routers   (some-> state-map ::id vals)
         router-id (reduce (fn [_ r]
                             (when (= target (some-> r ::pending-route :target))
                               (reduced (::id r))))
                     nil
                     routers)]
+    router-id))
+
+(defn target-ready*
+  "Mutation helper: apply any pending route segment that has the `target` ident."
+  [state-map target]
+  (let [router-id (router-for-pending-target state-map target)]
     (if router-id
       (apply-route* state-map (get-in state-map [::id router-id ::pending-route]))
       state-map)))
 
 (defmutation target-ready [{:keys [target]}]
-  (action [{:keys [state]}]
-    (swap! state target-ready* target))
-  (refresh [_] [::current-route]))
+  (action [{:keys [reconciler state]}]
+    (when-let [router-id (router-for-pending-target @state target)]
+      (uism/trigger! reconciler router-id :ready!))))
 
 (defn router? [component]
   (and component
@@ -180,6 +186,10 @@
   (action [{:keys [state]}]
     (swap! state apply-route* params)))
 
+(defn mark-route-pending* [state-map {:keys [router target] :as params}]
+  (log/info "Mark route pending " params)
+  (assoc-in state-map (conj router ::pending-route) params))
+
 (defmutation mark-route-pending
   "Mutation: Indicate that a given route is pending.
 
@@ -187,7 +197,7 @@
   target - The ident of the target route, with metadata :component that is the class of the target."
   [{:keys [router target] :as params}]
   (action [{:keys [state]}]
-    (swap! state assoc-in (conj router ::pending-route) params)))
+    (swap! state mark-route-pending* params)))
 
 (defn change-route
   "Trigger a route change.

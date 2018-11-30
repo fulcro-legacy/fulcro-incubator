@@ -16,32 +16,61 @@
     [fulcro.client.data-fetch :as df]
     [fulcro.incubator.dynamic-routing :as dr :refer [defrouter]]))
 
+(declare change-route)
+
+(defn ready-handler [env]
+  (uism/apply-action env dr/target-ready* (uism/retrieve env :target)))
+
+(defn fail-handler [env]
+  (log/error "Route failed")
+  env)
+
+(defn route-handler [{::uism/keys [event-data] :as env}]
+  (let [{:keys [router target]} event-data
+        immediate? (dr/immediate? target)]
+    (-> (if immediate?
+          (-> env
+            (uism/apply-action dr/apply-route* event-data)
+            (uism/activate :routed))
+          (-> env
+            (uism/apply-action dr/mark-route-pending* event-data)
+            (uism/set-timeout :error-timer :timeout! {} 500 #{:ready!})
+            (uism/set-timeout :delay-timer :waiting! {} 50 #{:ready!})
+            (uism/activate :deferred)))
+      (uism/store :target target))))
+
 (defstatemachine RouterStateMachine
   {::uism/actors
    #{:router}
 
    ::uism/aliases
-   {:current-route [:router ::current-route]}
+   {:current-route [:router ::dr/current-route]
+    :state         [:router ::dr/current-state]}
 
    ::uism/states
-   {:initial
-    {::uism/handler
-     (fn [{::uism/keys [event-data] :as env}]
-       (let [{:keys [targets]} event-data]
-         (-> env
-           (uism/store :targets (with-meta {} {:targets targets})))))}
+   {:initial  {::uism/handler route-handler}
 
-    :pending
-    {::uism/events
-     {}}
+    :deferred {::uism/events
+               {:waiting! {::uism/target-state :pending}
+                :ready!   {::uism/target-state :routed
+                           ::uism/handler      ready-handler}
+                :timeout! {::uism/target-state :failed
+                           ::uism/handler      fail-handler}}}
 
-    :failed
-    {}
+    :pending  {::uism/events
+               {:waiting! {::uism/target-state :pending}
+                :ready!   {::uism/target-state :routed
+                           ::uism/handler      ready-handler}
+                :timeout! {::uism/target-state :failed
+                           ::uism/handler      fail-handler}}}
 
-    :routed
-    {}
+    ;; failed may potentially resolve (just very late), so it must accept ready! events
+    :failed   {::uism/events
+               {:route! {::uism/handler route-handler}
+                :ready! {::uism/target-state :routed
+                         ::uism/handler      ready-handler}}}
 
-    }})
+    :routed   {::uism/handler route-handler}}})
 
 ;; TASK: Write a macro that simplifies this:
 ;; (defsc-router-target Pane2 [this props]
@@ -73,18 +102,25 @@
                    (will-leave [this props] true)]}
   (dom/div (str "PANE 2")))
 
-(prim/defsc SettingsPaneRouter [this {::dr/keys [current-route]}]
-  {:query         [::dr/id {::dr/current-route (prim/get-query Pane1)} {:alt0 (prim/get-query Pane2)}]
-   :ident         (fn [] [::dr/id "SettingsPaneRouter"])
+(prim/defsc SettingsPaneRouter [this {::dr/keys [id current-route] :as props}]
+  {:query         (fn [] [::dr/id [::uism/asm-id :SettingsPaneRouter] {::dr/current-route (prim/get-query Pane1)} {:alt0 (prim/get-query Pane2)}])
+   :ident         (fn [] [::dr/id :SettingsPaneRouter])
    :protocols     [static dr/Router
                    (get-targets [_] #{Pane1 Pane2})]
    :initial-state (fn [params]
-                    {::dr/id            "SettingsPaneRouter"
+                    {::dr/id            :SettingsPaneRouter
                      ::dr/current-route (prim/get-initial-state Pane1 params)
                      :alt0              (prim/get-initial-state Pane1 {})})}
-  (if-let [class (dr/current-route-class this)]
-    (let [factory (prim/factory class)]
-      (factory current-route))))
+  (let [current-state (get-in props [[::uism/asm-id :SettingsPaneRouter] ::uism/active-state])]
+    (log/info "Router " id "in state" current-state)
+    (case current-state
+      :initial (dom/div "Just Started.")
+      :pending (dom/div "LOADING...")
+      :failed (dom/div "Screwed.")
+      :routed (if-let [class (dr/current-route-class this)]
+                (let [factory (prim/factory class)]
+                  (factory current-route)))
+      nil)))
 
 #_(defrouter SettingsPaneRouter Pane1 Pane2)
 
@@ -119,34 +155,89 @@
   (dom/div (str "User: name = " name)))
 
 ; (defrouter RootRouter2 Settings User)
-(prim/defsc RootRouter2 [this {::dr/keys [current-route]}]
-  {:query         [::dr/id {::dr/current-route (prim/get-query Settings)} {:alt0 (prim/get-query User)}]
-   :ident         (fn [] [::dr/id "RootRouter2"])
+(prim/defsc RootRouter2 [this {::dr/keys [id current-route] :as props}]
+  {:query         (fn [] [::dr/id [::uism/asm-id :RootRouter2] {::dr/current-route (prim/get-query Settings)} {:alt0 (prim/get-query User)}])
+   :ident         (fn [] [::dr/id :RootRouter2])
    :protocols     [static dr/Router
                    (get-targets [_] #{Settings User})]
    :initial-state (fn [params]
-                    {::dr/id            "RootRouter2"
+                    {::dr/id            :RootRouter2
                      ::dr/current-route (prim/get-initial-state Settings params)
                      :alt0              (prim/get-initial-state User {})})}
-  (if-let [class (dr/current-route-class this)]
-    (let [factory (prim/factory class)]
-      (factory current-route))))
-
+  (let [current-state (get-in props [[::uism/asm-id :RootRouter2] ::uism/active-state])]
+    (js/console.log props)
+    (log/info "Router " id "in state" current-state)
+    (case current-state
+      :initial (dom/div "Just Started.")
+      :pending (dom/div "LOADING...")
+      :failed (dom/div "Screwed.")
+      :routed (if-let [class (dr/current-route-class this)]
+                (let [factory (prim/factory class)]
+                  (factory current-route)))
+      nil)))
 
 (def ui-root-router-2 (prim/factory RootRouter2))
 
+(defn change-route
+  "Trigger a route change.
+
+  this - The component (or reconciler) that is causing the route change.
+  new-route - A vector of URI components to pass to the router."
+  [this new-route]
+  (let [reconciler (prim/get-reconciler this)
+        state-map  (-> reconciler prim/app-state deref)
+        root       (prim/app-root reconciler)
+        root-class (prim/react-type root)
+        root-query (prim/get-query root-class state-map)
+        ast        (prim/query->ast root-query)
+        root       (dr/ast-node-for-route ast new-route)]
+    ;; breadth-first search for routers in the query. algorithm is as follows (app UI root starts out as "root"):
+    ;; 1. Breadth-first search for a router that can consume prefix off of new-route that router is now "root".
+    ;; 3. Do the routing step for "root", which will either be immediate or deferred:
+    ;;   - Immediate: Update ident, remove elements from new-route that were consumed, and resume step 1 starting from current "root"
+    ;;   - Deferred: We'll know the ident and class (since we get the ident from the target class of the router). Do NO actual state change,
+    ;;     but the remainder of the alg can continue as in "Immediate".
+    ;; 4. This continues until the new-route elements are consumed, or we reach the end of the query.
+    ;; Overall this is a static analysis of possible routes, so the current query doesn't matter since we're "skipping"
+    ;; over the dynamic queries of the router nodes.
+    (let [route-tx (atom [])]
+      (loop [{:keys [component]} root path new-route]
+        (when (and component (dr/router? component))
+          (let [{:keys [target matching-prefix]} (dr/route-target component path)
+                target-ast     (some-> target (prim/get-query state-map) prim/query->ast)
+                prefix-length  (count matching-prefix)
+                remaining-path (vec (drop prefix-length path))
+                segment        (dr/route-segment+ target)
+                params         (reduce
+                                 (fn [p [k v]] (if (keyword? k) (assoc p k v) p))
+                                 {}
+                                 (map (fn [a b] [a b]) segment matching-prefix))
+                router-ident   (prim/get-ident component {})
+                router-id      (-> router-ident second)
+                target-ident   (dr/will-enter+ target reconciler params)
+                event-data     {:router (vary-meta router-ident assoc :component component)
+                                :target (vary-meta target-ident assoc :component target)}]
+            (if-not (uism/get-active-state reconciler router-id)
+              (uism/begin! this RouterStateMachine router-id
+                {:router (uism/with-actor-class router-ident component)}
+                event-data)
+              (uism/trigger! reconciler router-id :route! event-data))
+            (when (seq remaining-path)
+              (recur (dr/ast-node-for-route target-ast remaining-path) remaining-path))))))))
+
 (defsc Root2 [this {:keys [router route] :as props}]
-  {:query         [:route {:router (prim/get-query RootRouter2)}]
-   :initial-state {:router {:x 2}
-                   :route  ["settings"]}}
+  {:query             [:route {:router (prim/get-query RootRouter2)}]
+   :componentDidMount (fn [] (change-route this ["settings"]))
+   :initial-state     {:router {:x 2}
+                       :route  ["settings"]}}
   (dom/div
     (dom/div "Current route: " (pr-str route))
     (dom/button {:onClick (fn []
-                            (dr/change-route this ["user" 1])
+                            (change-route this ["user" 1])
                             )} "Change route to /user/1")
-    (dom/button {:onClick (fn [] (dr/change-route this ["settings"]))} "Change route to /settings")
-    (dom/button {:onClick (fn [] (dr/change-route this ["settings" "pane1"]))} "Change route to /settings/pane1")
-    (dom/button {:onClick (fn [] (dr/change-route this ["settings" "pane2"]))} "Change route to /settings/pane2")
+    (dom/button {:onClick (fn [] (change-route this ["settings"]))} "Change route to /settings")
+    (dom/button {:onClick (fn [] (change-route this ["settings" "pane1"]))} "Change route to /settings/pane1")
+    (dom/button {:onClick (fn [] (change-route this ["settings" "pane2"]))} "Change route to /settings/pane2")
     (ui-root-router-2 router)))
 
 (server/defquery-entity :user/id

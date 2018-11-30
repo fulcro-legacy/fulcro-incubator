@@ -505,8 +505,7 @@
 (defn- ui-refresh-list
   "Returns a vector of things to refresh in Fulcro based on the final state of an active SM env."
   [env]
-  (let [smdef        (lookup-state-machine env)
-        actor-idents (mapv #(actor->ident env %) (::actor-names smdef))]
+  (let [actor-idents (or (some-> env (get-in (asm-path env ::actor->ident)) vals) [])]
     actor-idents))
 
 (defn- get-js-timer [env timer-id]
@@ -554,10 +553,13 @@
 (declare trigger-state-machine-event!)
 
 (defn trigger-queued-events! [mutation-env queued-triggers refresh-list]
-  (reduce (fn [refresh-list event]
-            (into refresh-list (trigger-state-machine-event! mutation-env event)))
-    refresh-list
-    queued-triggers))
+  (let [result
+        (reduce (fn [refresh-list event]
+                  (into refresh-list (trigger-state-machine-event! mutation-env event)))
+          refresh-list
+          queued-triggers)]
+    (log/info "Triggering refreshes on " result)
+    result))
 
 (defn trigger-state-machine-event!
   "IMPLEMENTATION DETAIL. Low-level implementation of triggering a state machine event. Does no direct interaction with
@@ -907,7 +909,10 @@
 (defn get-active-state
   "Get the name of the active state for an active state machine using a component."
   [this asm-id]
-  (-> (prim/component->state-map this)
-    ::asm-id
-    (get asm-id)
-    ::active-state))
+  (let [state-map (if (prim/reconciler? this)
+                    (some-> this prim/app-state deref)
+                    (prim/component->state-map this))]
+    (some-> state-map
+      ::asm-id
+      (get asm-id)
+      ::active-state)))
