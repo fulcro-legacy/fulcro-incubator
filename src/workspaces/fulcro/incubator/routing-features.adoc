@@ -148,6 +148,26 @@ The above defer mechanism should be sufficient to implement code splitting, wher
 
 TODO: A macro and small lib that wraps this concern.
 
+== TODO: Macro for Route Targets
+
+I'm thinking that the macro for this would be something like:
+
+```
+(defsc-router-target Pane2 [this props]
+  {... normal defsc stuff...
+   :route-segment ["pane2"]
+   :will-enter (fn [c reconciler route-params] ...)
+   :will-leave (fn [this props] true)
+  }
+  ...normal body...)
+```
+
+with only `:route-segment` required.
+
+`:will-leave`:: defaults to returning `true`.
+
+`:will-enter`:: Must return an immediate or deferred route instruction. The default is an immediate route based on the component's `(ident component-class {})`, which is only sane if the component has a singleton database instance (constant ident).
+
 == Full Example
 
 The workspaces source contains a full working example of this routing system in
