@@ -4,13 +4,20 @@ The routing system under design has the following feature requirements:
 
 Composition:: Routers should compose in a flexible manner that includes the easy ability to refactor the application and restructure.
 
-URI <-> Routes should be interpreted by the router UI structure itself::  Reshaping the URI can be done by optional functions that sit in-between browser URI and code.
-
 There should be a way to run pessimistic operations *before* moving to a given route::  This should be a chain of operations that is derived from the target routers themselves (or their children?).
 
 UI Code should be able to prevent a route change::  E.g. say there are unsaved changes on some page in a tree: a UI component must be able to "hook into" the routing system in order to prevent changes. NOTE: This is not a feature of the *routers*, but a feature of the *content* under a router.  This can be modelled as a global concern, since routing (esp. that involves URI changes) is a global concern.
 
 Code Splitting:: A complete routing system for SPAs should make it easy to do code splitting at particular routes so that an initial load of the application need not load the code for every feature.
+
+DRY:: It should not be necessary to repeat the "route path" as an external data structure when it matches the UI
+structure. The UI composition itself can easily act as a "default" routing path structure.
+
+URI <=> UI Routes should be flexible and able to "alias"::  Reshaping the URI can be done by optional functions that sit in-between browser URI and code.
+
+Navigable Code:: During development it should be easy to see (as local concerns) what happens along a given UI route.  Code navigation (jumping from root through subcomponents) should make it trivial to understand all routing concerns. Route "operations" like loading should be co-located with the components that act as routing targets.
+
+Introspection:: One should be able to query for the available routes (of loaded code), and the current visible route.
 
 == Routers
 
@@ -125,9 +132,11 @@ The function to cause a route change is:
 
 and it *always* starts from the root of your application and causes a full update of the correct route.
 
-NOTE: This library will not have any code that connects HTML5 routing events to UI routing.  That is a relatively simple exercise and there are plenty of libraries that can help with the task.  The logic of transforming a URI to the correct vector and calling a function is trivial.
+Notice that since the command to control the route is up to you, so is the path you pass to it. This makes it easy to do things like alias one path found in the URI to a different UI path, which is useful when you restructure the real UI but would like to maintain support for old paths that users may have bookmarked.
 
-TODO: We need a `relative-change-route` that can be run from some layer. E.g. let a UI component under "settings" switch to "pane1" without having to start from root. This would also aid with composition and refactoring, since the "relative path" instructions would "self-heal" under refactoring.
+NOTE: This library will not have any code that connects HTML5 routing events to UI routing.  That is a relatively simple exercise and there are plenty of libraries that can help with the task.  The logic of transforming a URI to the correct vector and calling a function is trivial, and the concern of aliasing and legacy path transforms is something you will likely want to put in the middle of that.
+
+TODO: We need a `relative-change-route` that can be run from some layer. E.g. let a UI component under "settings" switch to "pane1" without having to start from root. This would also aid with composition and refactoring, since the "relative path" instructions would "self-heal" under refactoring.  It is also needed for deferred routing to work right with code splitting.
 
 TODO: Still need a function that gives back the "current route" as a vector. It's just a query scan, but it isn't written yet.
 
