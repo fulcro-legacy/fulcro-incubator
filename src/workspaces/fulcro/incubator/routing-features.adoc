@@ -10,6 +10,8 @@ There should be a way to run pessimistic operations *before* moving to a given r
 
 UI Code should be able to prevent a route change::  E.g. say there are unsaved changes on some page in a tree: a UI component must be able to "hook into" the routing system in order to prevent changes. NOTE: This is not a feature of the *routers*, but a feature of the *content* under a router.  This can be modelled as a global concern, since routing (esp. that involves URI changes) is a global concern.
 
+Code Splitting:: A complete routing system for SPAs should make it easy to do code splitting at particular routes so that an initial load of the application need not load the code for every feature.
+
 == Routers
 
 Dynamic routing in Fulcro can be easily facilitated by leveraging the UI query, which is a tool of composition that is always guaranteed to be present in a properly-structured application.  Each component's state will be normalized, and the class and relative UI position can be determined by examining the current UI query.
@@ -152,7 +154,7 @@ Note that the route parameters come in via a map keyed by the keyword in your `r
 
 IMPORTANT: The `will-enter` method *MUST* return the value of a call to either `route-immediate` or `route-deferred`.
 
-==== Using Deferred Loading for Code Splitting
+==== Code Splitting
 
 The route defer mechanism should be sufficient to implement code splitting, where the routing target is the "join point" for the dynamic code.  Basically the component would not include the code-split child in the query or UI initially, but could trigger a code load and defer routing (storing the ident in a place where the loaded code could trigger the completion of the route, and a dynamic query change of the original component to point to the newly loaded component).
 
@@ -160,21 +162,30 @@ Something like:
 
 ```
 (defsc CodeSplit [this props]
-  {:ident     (fn [] [:CodeSplit 1])
+  {:ident     (fn [] [:CodeSplit 1])     ; constant ident
+   :query     [{:loaded-component ['*]}] ; a placeholder join. Set dynamically after code load
+   :initial-state {:loaded-component {}} ; placeholder state data
    :protocols [static dr/RouteTarget
                (will-enter [_ reconciler _]
                  ;; trigger a code load
                  (loader/load :some-module)
                  ;; The loaded code would use this data (at some well-known location)
-                 ;; to figure out how to set the query of CodeSplit, and run the
-                 ;; target-ready mutation:
-                 (reset! common-ns/pending-route-atom {:reconciler reconciler
-                                                       :class CodeSplit})
-                 (dr/route-deferred (get-ident CodeSplit {})))]
+                 ;; to figure out how to set the query of CodeSplit, join up some data in app
+                 ;; state, and run the target-ready mutation:
+                 (swap! common-ns/pending-route-atom assoc :some-module {:reconciler reconciler
+                                                                         :class CodeSplit})
+                 (dr/route-deferred [:CodeSplit 1]))]}
    ...
+   ;; The DOM can use query introspection to find the component that ended up in the query, make
+   ;; a factory for it, and render it.  See how the dr/current-route-class macro for an example
+   ;; of how to do that. something like:
+   ;; (let [factory (some-> this prim/get-query prim/query->ast1 :component prim/factory)]
+   ;;   (when factory (factory (:loaded-component props))))
 ```
 
 TODO: A macro and small lib that wraps this concern.
+
+TODO: A dynamic code load means that there may be path segments in the current route that cannot be evaluated until the code load is complete.  It may be necessary to "re-trigger" a route after a code load to ensure that the path segments have been fully evaluated.  This would be a good use of a relative change route function, which could be run on the newly-loaded sub-components with the remaining path. It is probably best to just have a third kind of return value: `(df/route-deferred-retry ident)` which will retry the sub-path as soon as the deferred route is resolved.  It might be possible to just defer the rest of the sub-routing until the given route is resolved...that is probably best, as it doesn't require user intervention.
 
 == TODO: Macro for Route Targets
 
