@@ -1,6 +1,7 @@
 (ns fulcro.incubator.dynamic-routing
   #?(:cljs (:require-macros fulcro.incubator.dynamic-routing))
   (:require
+    [fulcro.incubator.ui-state-machines :as uism :refer [defstatemachine]]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
     [taoensso.timbre :as log]
@@ -233,7 +234,6 @@
               (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))
       ;; TASK: Cancel pending routes before potentially adding new ones...send user a route cancelled message.
       (prim/transact! reconciler (into [::current-route] @route-tx)))))
-
 
 #?(:clj
    (defn defrouter* [env router-sym router-targets]

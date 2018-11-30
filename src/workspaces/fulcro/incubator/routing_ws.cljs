@@ -1,6 +1,6 @@
 (ns fulcro.incubator.routing-ws
   (:require
-    [nubank.workspaces.core :refer [deftest]]
+    [fulcro.incubator.ui-state-machines :as uism :refer [defstatemachine]]
     [fulcro-spec.core :refer [assertions component]]
     [nubank.workspaces.core :as ws]
     [fulcro.client.primitives :as prim :refer [defsc]]
@@ -16,6 +16,41 @@
     [fulcro.client.data-fetch :as df]
     [fulcro.incubator.dynamic-routing :as dr :refer [defrouter]]))
 
+(defstatemachine RouterStateMachine
+  {::uism/actors
+   #{:router}
+
+   ::uism/aliases
+   {:current-route [:router ::current-route]}
+
+   ::uism/states
+   {:initial
+    {::uism/handler
+     (fn [{::uism/keys [event-data] :as env}]
+       (let [{:keys [targets]} event-data]
+         (-> env
+           (uism/store :targets (with-meta {} {:targets targets})))))}
+
+    :pending
+    {::uism/events
+     {}}
+
+    :failed
+    {}
+
+    :routed
+    {}
+
+    }})
+
+;; TASK: Write a macro that simplifies this:
+;; (defsc-router-target Pane2 [this props]
+;;   {... normal defsc stuff...
+;;    :route-segment ["pane2"]
+;;    :will-enter (fn [c reconciler route-params] ...) ; optional, defaults to ident of component
+;;    :will-leave (fn [this props] boolean) ; optional, defaults to true
+;;   }
+;;   ...normal body...)
 (defsc Pane1 [this {:keys [:y] :as props}]
   {:query         [:y]
    :ident         (fn [] [:COMPONENT/by-id :pane1])
@@ -27,14 +62,6 @@
                    (will-leave [this props] true)]}
   (dom/div (str "PANE 1")))
 
-;; TASK: Write a macro that simplifies this:
-;; (defsc-router-target Pane2 [this props]
-;;   {... normal defsc stuff...
-;;    :route-segment ["pane2"]
-;;    :will-enter (fn [c reconciler route-params] ...) ; optional, defaults to ident of component
-;;    :will-leave (fn [this props] boolean) ; optional, defaults to true
-;;   }
-;;   ...normal body...)
 (defsc Pane2 [this {:keys [:x] :as props}]
   {:query         [:x]
    :ident         (fn [] [:COMPONENT/by-id :pane2])
@@ -46,7 +73,20 @@
                    (will-leave [this props] true)]}
   (dom/div (str "PANE 2")))
 
-(defrouter SettingsPaneRouter Pane1 Pane2)
+(prim/defsc SettingsPaneRouter [this {::dr/keys [current-route]}]
+  {:query         [::dr/id {::dr/current-route (prim/get-query Pane1)} {:alt0 (prim/get-query Pane2)}]
+   :ident         (fn [] [::dr/id "SettingsPaneRouter"])
+   :protocols     [static dr/Router
+                   (get-targets [_] #{Pane1 Pane2})]
+   :initial-state (fn [params]
+                    {::dr/id            "SettingsPaneRouter"
+                     ::dr/current-route (prim/get-initial-state Pane1 params)
+                     :alt0              (prim/get-initial-state Pane1 {})})}
+  (if-let [class (dr/current-route-class this)]
+    (let [factory (prim/factory class)]
+      (factory current-route))))
+
+#_(defrouter SettingsPaneRouter Pane1 Pane2)
 
 (def ui-settings-pane-router (prim/factory SettingsPaneRouter))
 
@@ -78,7 +118,20 @@
                (will-leave [this props] true)]}
   (dom/div (str "User: name = " name)))
 
-(defrouter RootRouter2 Settings User)
+; (defrouter RootRouter2 Settings User)
+(prim/defsc RootRouter2 [this {::dr/keys [current-route]}]
+  {:query         [::dr/id {::dr/current-route (prim/get-query Settings)} {:alt0 (prim/get-query User)}]
+   :ident         (fn [] [::dr/id "RootRouter2"])
+   :protocols     [static dr/Router
+                   (get-targets [_] #{Settings User})]
+   :initial-state (fn [params]
+                    {::dr/id            "RootRouter2"
+                     ::dr/current-route (prim/get-initial-state Settings params)
+                     :alt0              (prim/get-initial-state User {})})}
+  (if-let [class (dr/current-route-class this)]
+    (let [factory (prim/factory class)]
+      (factory current-route))))
+
 
 (def ui-root-router-2 (prim/factory RootRouter2))
 
