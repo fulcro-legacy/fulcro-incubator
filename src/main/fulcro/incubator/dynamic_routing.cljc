@@ -1,8 +1,10 @@
 (ns fulcro.incubator.dynamic-routing
+  #?(:cljs (:require-macros fulcro.incubator.dynamic-routing))
   (:require
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
-    [taoensso.timbre :as log]))
+    [taoensso.timbre :as log]
+    [cljs.spec.alpha :as s]))
 
 ;; STATIC protocol.
 (defprotocol RouteTarget
@@ -231,5 +233,38 @@
               (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))
       ;; TASK: Cancel pending routes before potentially adding new ones...send user a route cancelled message.
       (prim/transact! reconciler (into [::current-route] @route-tx)))))
+
+
+#?(:clj
+   (defn defrouter* [env router-sym router-targets]
+     (let [id                   (name (gensym (name router-sym)))
+           query                (into [::id
+                                       {::current-route `(prim/get-query ~(first router-targets))}]
+                                  (map-indexed
+                                    (fn [idx s] {(keyword (str "alt" idx)) `(prim/get-query ~s)})
+                                    (rest router-targets)))
+           initial-state-map    (into {::id            id
+                                       ::current-route `(prim/get-initial-state ~(first router-targets) ~'params)}
+                                  (map-indexed
+                                    (fn [idx s] [(keyword (str "alt" idx)) `(prim/get-initial-state ~s {})])
+                                    (rest router-targets)))
+           ident-method         (apply list `(fn [] [::id ~id]))
+           get-targets-method   (apply list `(~'get-targets [~'c] ~(set router-targets)))
+           initial-state-lambda (apply list `(fn [~'params] ~initial-state-map))]
+       `(prim/defsc ~router-sym [~'this {::keys [~'id ~'current-route] :as ~'props}]
+          {:query         ~query
+           :ident         ~ident-method
+           :protocols     [~'static fulcro.incubator.dynamic-routing/Router
+                           ~get-targets-method]
+           :initial-state ~initial-state-lambda}
+          (if-let [~'class (fulcro.incubator.dynamic-routing/current-route-class ~'this)]
+            (let [~'factory (prim/factory ~'class)]
+              (~'factory ~'current-route)))))))
+
+#?(:clj
+   (defmacro defrouter [router-sym & router-targets]
+     (defrouter* &env router-sym router-targets)))
+
+
 
 

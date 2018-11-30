@@ -14,7 +14,7 @@
     [fulcro.client.mutations :as m]
     [taoensso.timbre :as log]
     [fulcro.client.data-fetch :as df]
-    [fulcro.incubator.dynamic-routing :as dr]))
+    [fulcro.incubator.dynamic-routing :as dr :refer [defrouter]]))
 
 (defsc Pane1 [this {:keys [:y] :as props}]
   {:query         [:y]
@@ -27,6 +27,14 @@
                    (will-leave [this props] true)]}
   (dom/div (str "PANE 1")))
 
+;; TASK: Write a macro that simplifies this:
+;; (defsc-router-target Pane2 [this props]
+;;   {... normal defsc stuff...
+;;    :route-segment ["pane2"]
+;;    :will-enter (fn [c reconciler route-params] ...) ; optional, defaults to ident of component
+;;    :will-leave (fn [this props] boolean) ; optional, defaults to true
+;;   }
+;;   ...normal body...)
 (defsc Pane2 [this {:keys [:x] :as props}]
   {:query         [:x]
    :ident         (fn [] [:COMPONENT/by-id :pane2])
@@ -38,19 +46,7 @@
                    (will-leave [this props] true)]}
   (dom/div (str "PANE 2")))
 
-(defsc SettingsPaneRouter [this {::dr/keys [id current-route] :as props}]
-  ;; TASK: fix initial state hack
-  {:query         [::dr/id {::dr/current-route (prim/get-query Pane1)} {::b (prim/get-query Pane2)}]
-   :ident         (fn [] [::dr/id "SettingsPaneRouter"])
-   :protocols     [static dr/Router (get-targets [c] #{Pane1 Pane2})]
-   :initial-state (fn [params]
-                    {::dr/id            "SettingsPaneRouter"
-                     ::b             (prim/get-initial-state Pane2 {})
-                     ::dr/current-route (prim/get-initial-state Pane1 params)})}
-  (if-let [class (dr/current-route-class this)]
-    (let [factory (prim/factory class)]
-      (factory current-route))
-    (dom/div "Internal Router error. No current route.")))
+(defrouter SettingsPaneRouter Pane1 Pane2)
 
 (def ui-settings-pane-router (prim/factory SettingsPaneRouter))
 
@@ -82,17 +78,7 @@
                (will-leave [this props] true)]}
   (dom/div (str "User: name = " name)))
 
-(defsc RootRouter2 [this {::dr/keys [id current-route] :as props}]
-  {:query         [::dr/id {::dr/current-route (prim/get-query Settings)}]
-   :ident         (fn [] [::dr/id "RootRouter2"])              ; routers are singletons? Is that acceptable?
-   :protocols     [static dr/Router (get-targets [c] #{User Settings})]
-   :initial-state (fn [params]
-                    {::dr/id            "RootRouter2"
-                     ::dr/current-route (prim/get-initial-state Settings params)})}
-  (if-let [class (dr/current-route-class this)]
-    (let [factory (prim/factory class)]
-      (factory current-route))
-    (dom/div "Internal Router error. No current route.")))
+(defrouter RootRouter2 Settings User)
 
 (def ui-root-router-2 (prim/factory RootRouter2))
 
@@ -123,4 +109,4 @@
     {::f.portal/root       Root2
      ::f.portal/wrap-root? false
      ::f.portal/app        {:started-callback (fn [{:keys [reconciler]}])
-                            :networking       (server/new-server-emulator (server/fulcro-parser) 2000)}}))
+                            :networking       (server/new-server-emulator (server/fulcro-parser) 1000)}}))
