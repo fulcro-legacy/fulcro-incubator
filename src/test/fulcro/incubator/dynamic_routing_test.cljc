@@ -75,7 +75,6 @@
                    (will-leave [this props] true)]})
 
 (defsc SettingsPaneRouter [this {::keys [id current-route] :as props}]
-  ;; TASK: fix initial state hack
   {:query         [::id {::current-route (prim/get-query Pane1)} {::b (prim/get-query Pane2)}]
    :ident         (fn [] [::id "SettingsPaneRouter"])
    :protocols     [static dr/Router (get-targets [c] #{Pane1 Pane2})]
