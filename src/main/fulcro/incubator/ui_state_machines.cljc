@@ -1,5 +1,5 @@
 (ns fulcro.incubator.ui-state-machines
-  #?(:cljs (:require-macros [fulcro.incubator.ui-state-machines]))
+  #?(:cljs (:require-macros fulcro.incubator.ui-state-machines))
   (:refer-clojure :exclude [load])
   (:require
     [clojure.set :as set]

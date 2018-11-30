@@ -18,4 +18,5 @@
                                    fulcrologic/semantic-ui-react-wrappers {:mvn/version "2.0.3"}
                                    binaryage/devtools                     {:mvn/version "0.9.10"}
                                    nubank/workspaces                      {:mvn/version "1.0.1"}
-                                   fulcrologic/fulcro-spec                {:mvn/version "2.1.3"}}}}}
+                                   fulcrologic/fulcro-spec                {:mvn/version "2.1.3"}}}}
+ :deps    {org.clojure/clojurescript {:mvn/version "1.10.439"}}}

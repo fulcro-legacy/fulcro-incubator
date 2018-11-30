@@ -1,5 +1,5 @@
 (ns fulcro.incubator.spec-helpers
-  #?(:cljs (:require-macros [fulcro.incubator.spec-helpers]))
+  #?(:cljs (:require-macros fulcro.incubator.spec-helpers))
   (:require
     [cljs.env]
     [clojure.test]
