@@ -62,6 +62,8 @@ The use of query scanning and dynamic queries for routing mean that you can easi
 
 Such routers are simple Fulcro components, and can be composed into the UI just like any other components. The initial state parameters passed to such a router are *forwarded* to the *default* (first listed) router target (if it has initial state).
 
+IMPORTANT: Routers are true singletons. A router ends up with a dynamic query keyed by the class itself. This means that a given router cannot be used in a UI in more than one place. This seems like a reasonable restriction given that they are so simple to declare at a given tree (sub)root, and are typically very positional in nature.
+
 == Routing Targets
 
 Most of the novelty about routes can now be encoded into normal components with simple declarations (will write a helper macro soon).  The routing novelty is specified by two protocols (`will-leave` functionality is not implemented yet, but can be declared):
@@ -83,6 +85,16 @@ Most of the novelty about routes can now be encoded into normal components with 
 `route-segment`:: A (relative) path segment that this component can "consume" from an incoming route. This is purely static data, and the argument is the class itself (to satisfy protocols). The current composition of routing targets in the UI determines the overall "absolute" path of a route. Each `router` in the UI should be thought of as a stand-in for a "/" in an HTML5 URI path.
 `will-enter`:: A notification that this route target should be shown.  Can return a value indicating a desire to do so immediately, or after some I/O. This method is called *before* the component is on-screen, so it cannot receive a react component instance.  It is instead passed the reconciler and router parameters which can be used to do things like issues loads and run mutations.
 `will-leave`:: A method that can prevent a route change that causes this component to leave the screen. This is called on the instance, so `this` and `props` are available.
+
+Route targets can be singletons or regular components that have multiple instances.  In the latter case you must be sure that the ident returned from `will-enter` points to valid data in state by the time the route is resolved.
+
+== Initial Route
+
+The compostion of routers in your UI will result in some overall route that is the "default" at application start.  This is simply the first element of each `defrouter` that is reachable from your root.
+
+The "default" target on a route that is visible at application load MUST have initial state that gives the router something in state to "route to", otherwise you won't be able to see it.
+
+FIXME: The current implementation probably requires all route target components to have initial state, and probably gives a lousy error if they don't. This is because the defrouter macro is assuming it is always there, and is issuing a call to get it for every child.
 
 === Route Segments and Changing Routes
 
