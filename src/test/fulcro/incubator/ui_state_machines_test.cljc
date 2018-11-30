@@ -12,8 +12,7 @@
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.incubator.pessimistic-mutations :as pm]
     [fulcro.incubator.ui-state-machines :as uism]
-    [fulcro.incubator.test-helpers :as th]
-    ))
+    [fulcro.incubator.test-helpers :as th]))
 
 #?(:cljs
    (defonce enzyme-config
