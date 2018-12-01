@@ -451,14 +451,14 @@
                                                                  "Triggers the queued event"
                                                                  event => event-1
                                                                  "with the mutation env"
-                                                                 menv => mutation-env)
+                                                                 (= menv mutation-env) => true)
                                                                [[:b 2]])
         (uism/trigger-state-machine-event! menv event) =1x=> (do
                                                                (assertions
                                                                  "Triggers the queued event"
                                                                  event => event-2
                                                                  "with the mutation env"
-                                                                 menv => mutation-env)
+                                                                 (= mutation-env menv) => true)
                                                                [[:c 3]])
 
         (let [actual (uism/trigger-queued-events! mutation-env triggers [[:A 1]])]
@@ -467,7 +467,7 @@
             actual => [[:A 1] [:b 2] [:c 3]])))))
 
   (specification "trigger-state-machine-event mutation"
-    (let [menv {:state (atom {}) :reconciler (prim/reconciler {})}
+    (let [menv    {:state (atom {}) :reconciler (prim/reconciler {})}
           trigger {::uism/asm-id :a ::uism/event-id :x}
           {:keys [action]} (m/mutate menv `uism/trigger-state-machine-event trigger)]
       (when-mocking!
@@ -475,7 +475,7 @@
         (uism/trigger-state-machine-event! mutation-env p) => (do
                                                                 (assertions
                                                                   "runs the state machine event"
-                                                                  mutation-env => menv
+                                                                  (= mutation-env menv) => true
                                                                   p => trigger)
                                                                 [[:table 1]])
         (fulcro.client.util/force-render r items) => (do

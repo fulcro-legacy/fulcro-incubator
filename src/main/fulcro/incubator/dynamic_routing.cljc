@@ -1,6 +1,7 @@
 (ns fulcro.incubator.dynamic-routing
   #?(:cljs (:require-macros fulcro.incubator.dynamic-routing))
   (:require
+    [ghostwheel.core :as g :refer [>fdef => ?]]
     [fulcro.incubator.ui-state-machines :as uism :refer [defstatemachine]]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
