@@ -476,10 +476,10 @@
                                                                   mutation-env => {:reconciler :r}
                                                                   p => {:params true})
                                                                 [[:table 1]])
-        (fcip/queue! r items) => (do
-                                   (assertions
-                                     "Queues the actors for UI refresh"
-                                     items => [[:table 1]]))
+        (fulcro.client.util/force-render r items) => (do
+                                                       (assertions
+                                                         "Queues the actors for UI refresh"
+                                                         items => [[:table 1]]))
 
         (action))))
 
@@ -619,7 +619,10 @@
                                                             "triggers the ::started event"
                                                             (::uism/event-id p) => ::uism/started
                                                             (::uism/asm-id p) => :fake)
-                                                          nil)
+                                                          [[:A 1]])
+          (fulcro.client.util/force-render r list) => (assertions
+                                                        "Updates the UI"
+                                                        list => [[:A 1]])
 
           (action)
 

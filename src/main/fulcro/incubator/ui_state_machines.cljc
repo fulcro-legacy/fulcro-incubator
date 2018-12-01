@@ -8,7 +8,6 @@
     [fulcro.client.data-fetch :as df]
     [fulcro.client.util]
     [fulcro.client.impl.data-targeting :as dft]
-    [fulcro.client.impl.protocols :as fcip]
     [fulcro.client.mutations :as m :refer [defmutation]]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.incubator.mutation-interface :as mi]
@@ -643,7 +642,7 @@
                                                                 ::asm-id     asm-id
                                                                 ::event-data {}}
                                                          event-data (assoc ::event-data event-data)))]
-      (fcip/queue! reconciler to-refresh))))
+      (fulcro.client.util/force-render reconciler to-refresh))))
 
 (mi/declare-mutation begin `begin)
 
