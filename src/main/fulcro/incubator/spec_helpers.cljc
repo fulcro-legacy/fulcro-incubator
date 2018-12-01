@@ -1,4 +1,6 @@
 (ns fulcro.incubator.spec-helpers
+  "A (temporary) port of ghostwheel without deps, and with clj support.  Do NOT use this. New versions of ghostwheel
+   are sufficient, and there is no need for this anymore."
   #?(:cljs (:require-macros fulcro.incubator.spec-helpers))
   (:require
     [cljs.env]

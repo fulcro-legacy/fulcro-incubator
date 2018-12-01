@@ -426,7 +426,7 @@
                                                             satom => fulcro-state)
                                                           nil)
 
-             (uism/ui-refresh-list env) => [:x :y]
+             (uism/ui-refresh-list env) => [[:x :y]]
 
              (uism/trigger-queued-events! menv triggers list) =1x=> (do
                                                                       (assertions
@@ -438,10 +438,10 @@
              (let [actual (uism/trigger-state-machine-event! mutation-env event)]
                (assertions
                  "returns the list of things to refresh in the UI"
-                 actual => [:x :y])))))))
+                 actual => [[:x :y]])))))))
 
   (specification "trigger-queued-events!"
-    (let [mutation-env {:state (atom {}) :ref [:A 1]}
+    (let [mutation-env {:state (atom {}) :ref [:A 1] :reconciler (prim/reconciler {})}
           event-1      {::uism/asm-id :a ::uism/event-id :event-1 ::uism/event-data {:a 1}}
           event-2      {::uism/asm-id :b ::uism/event-id :event-2 ::uism/event-data {:a 2}}
           triggers     [event-1 event-2]]
@@ -467,14 +467,16 @@
             actual => [[:A 1] [:b 2] [:c 3]])))))
 
   (specification "trigger-state-machine-event mutation"
-    (let [{:keys [action]} (m/mutate {:reconciler :r} `uism/trigger-state-machine-event {:params true})]
+    (let [menv {:state (atom {}) :reconciler (prim/reconciler {})}
+          trigger {::uism/asm-id :a ::uism/event-id :x}
+          {:keys [action]} (m/mutate menv `uism/trigger-state-machine-event trigger)]
       (when-mocking!
         (uism/defer f) => (f)
         (uism/trigger-state-machine-event! mutation-env p) => (do
                                                                 (assertions
                                                                   "runs the state machine event"
-                                                                  mutation-env => {:reconciler :r}
-                                                                  p => {:params true})
+                                                                  mutation-env => menv
+                                                                  p => trigger)
                                                                 [[:table 1]])
         (fulcro.client.util/force-render r items) => (do
                                                        (assertions
@@ -601,7 +603,7 @@
 ;; not usable from clj
 (specification "begin!"
   (let [fulcro-state (atom {})
-        mutation-env {:state fulcro-state :ref [:TABLE 1]}]
+        mutation-env {:state fulcro-state :ref [:TABLE 1] :reconciler (prim/reconciler {})}]
     (component "(the begin mutation)"
       (let [creation-args {::uism/state-machine-id `test-machine
                            ::uism/asm-id           :fake
