@@ -5,7 +5,8 @@
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
     [taoensso.timbre :as log]
-    [cljs.spec.alpha :as s]))
+    [clojure.spec.alpha :as s]
+    #?(:clj [cljs.analyzer :as ana])))
 
 ;; STATIC protocol.
 (defprotocol RouteTarget
@@ -67,12 +68,12 @@
      :cljs (when (implements? Router class)
              (get-targets class))))
 
+
 (defn route-immediate [ident] (with-meta ident {:immediate true}))
 (defn route-deferred [ident] (with-meta ident {:immediate false}))
 (defn immediate? [ident] (some-> ident meta :immediate))
 
 (defn- apply-route* [state-map {:keys [router target] :as params}]
-  (log/info "Apply route " params)
   (let [router-class (-> router meta :component)
         router-id    (second router)
         target-class (-> target meta :component)]
@@ -101,7 +102,8 @@
 (defmutation target-ready [{:keys [target]}]
   (action [{:keys [reconciler state]}]
     (when-let [router-id (router-for-pending-target @state target)]
-      (uism/trigger! reconciler router-id :ready!))))
+      (uism/trigger! reconciler router-id :ready!)))
+  (refresh [_] [:route]))
 
 (defn router? [component]
   (and component
@@ -187,68 +189,163 @@
     (swap! state apply-route* params)))
 
 (defn mark-route-pending* [state-map {:keys [router target] :as params}]
-  (log/info "Mark route pending " params)
   (assoc-in state-map (conj router ::pending-route) params))
 
-(defmutation mark-route-pending
-  "Mutation: Indicate that a given route is pending.
+(defn ready-handler [env]
+  (uism/apply-action env target-ready* (uism/retrieve env :target)))
 
-  router - The ident of the router, with metadata :component that is the class of the router.
-  target - The ident of the target route, with metadata :component that is the class of the target."
-  [{:keys [router target] :as params}]
-  (action [{:keys [state]}]
-    (swap! state mark-route-pending* params)))
+(defn fail-handler [env] env)
+
+(defn route-handler [{::uism/keys [event-data] :as env}]
+  (let [{:keys [router target error-timeout deferred-timeout] :or {error-timeout 5000 deferred-timeout 100}} event-data
+        immediate? (immediate? target)]
+    (-> (if immediate?
+          (-> env
+            (uism/apply-action apply-route* event-data)
+            (uism/activate :routed))
+          (-> env
+            (uism/apply-action mark-route-pending* event-data)
+            (uism/set-timeout :error-timer :timeout! {} error-timeout #{:ready! :route!})
+            (uism/set-timeout :delay-timer :waiting! {} deferred-timeout #{:ready! :route!})
+            (uism/activate :deferred)))
+      (uism/store :target target))))
+
+(defstatemachine RouterStateMachine
+  {::uism/actors
+   #{:router}
+
+   ::uism/aliases
+   {:current-route [:router ::current-route]
+    :state         [:router ::current-state]}
+
+   ::uism/states
+   {:initial  {::uism/handler route-handler}
+
+    :deferred {::uism/events
+               {:waiting! {::uism/target-state :pending}
+                :route!   {::uism/handler route-handler}
+                :ready!   {::uism/target-state :routed
+                           ::uism/handler      ready-handler}
+                :timeout! {::uism/target-state :failed
+                           ::uism/handler      fail-handler}}}
+
+    :pending  {::uism/events
+               {:waiting! {::uism/target-state :pending}
+                :route!   {::uism/handler route-handler}
+                :ready!   {::uism/target-state :routed
+                           ::uism/handler      ready-handler}
+                :timeout! {::uism/target-state :failed
+                           ::uism/handler      fail-handler}}}
+
+    ;; failed may potentially resolve (just very late), so it must accept ready! events
+    :failed   {::uism/events
+               {:route! {::uism/handler route-handler}
+                :ready! {::uism/target-state :routed
+                         ::uism/handler      ready-handler}}}
+
+    :routed   {::uism/handler route-handler}}})
+
 
 (defn change-route
   "Trigger a route change.
 
   this - The component (or reconciler) that is causing the route change.
-  new-route - A vector of URI components to pass to the router."
-  [this new-route]
-  (let [reconciler (prim/get-reconciler this)
-        state-map  (-> reconciler prim/app-state deref)
-        root       (prim/app-root reconciler)
-        root-class (prim/react-type root)
-        root-query (prim/get-query root-class state-map)
-        ast        (prim/query->ast root-query)
-        root       (ast-node-for-route ast new-route)]
-    ;; breadth-first search for routers in the query. algorithm is as follows (app UI root starts out as "root"):
-    ;; 1. Breadth-first search for a router that can consume prefix off of new-route that router is now "root".
-    ;; 3. Do the routing step for "root", which will either be immediate or deferred:
-    ;;   - Immediate: Update ident, remove elements from new-route that were consumed, and resume step 1 starting from current "root"
-    ;;   - Deferred: We'll know the ident and class (since we get the ident from the target class of the router). Do NO actual state change,
-    ;;     but the remainder of the alg can continue as in "Immediate".
-    ;; 4. This continues until the new-route elements are consumed, or we reach the end of the query.
-    ;; Overall this is a static analysis of possible routes, so the current query doesn't matter since we're "skipping"
-    ;; over the dynamic queries of the router nodes.
-    (let [route-tx (atom [])]
-      (loop [{:keys [component]} root path new-route]
-        (when (and component (router? component))
-          (let [{:keys [target matching-prefix]} (route-target component path)
-                target-ast     (some-> target (prim/get-query state-map) prim/query->ast)
-                prefix-length  (count matching-prefix)
-                remaining-path (vec (drop prefix-length path))
-                segment        (route-segment+ target)
-                params         (reduce
-                                 (fn [p [k v]] (if (keyword? k) (assoc p k v) p))
-                                 {}
-                                 (map (fn [a b] [a b]) segment matching-prefix))
-                router-ident   (prim/get-ident component {})
-                target-ident   (will-enter+ target reconciler params)]
-            (if (immediate? target-ident)
-              (swap! route-tx into `[(apply-route ~{:router (with-meta router-ident {:component component})
-                                                    :target (with-meta target-ident {:component target})})])
-              (swap! route-tx into `[(mark-route-pending ~{:router (with-meta router-ident {:component component})
-                                                           :target (with-meta target-ident {:component target})})]))
-            (when (seq remaining-path)
-              (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))
-      ;; TASK: Cancel pending routes before potentially adding new ones...send user a route cancelled message.
-      (prim/transact! reconciler (into [::current-route] @route-tx)))))
+  new-route - A vector of URI components to pass to the router.
+  timeouts - A map of timeouts that affect UI during deferred routes: {:error-timeout ms :deferred-timeout ms}
+
+  The error timeout is how long to wait  (default 5000ms) before showing the error-ui of a route (which must be defined on the
+  router that is having problems).  The deferred-timeout (default 100ms) is how long to wait before showing the loading-ui of
+  a deferred router (to prevent flicker).
+  "
+  ([this new-route]
+   (change-route this new-route {}))
+  ([this new-route timeouts]
+   (uism/defer
+     #(let [reconciler (if (prim/reconciler? this) this (prim/get-reconciler this))
+            state-map  (-> reconciler prim/app-state deref)
+            root       (prim/app-root reconciler)
+            root-query (prim/get-query root state-map)
+            ast        (prim/query->ast root-query)
+            root       (ast-node-for-route ast new-route)]
+        ;; breadth-first search for routers in the query. algorithm is as follows (app UI root starts out as "root"):
+        ;; 1. Breadth-first search for a router that can consume prefix off of new-route that router is now "root".
+        ;; 3. Do the routing step for "root", which will either be immediate or deferred:
+        ;;   - Immediate: Update ident, remove elements from new-route that were consumed, and resume step 1 starting from current "root"
+        ;;   - Deferred: We'll know the ident and class (since we get the ident from the target class of the router). Do NO actual state change,
+        ;;     but the remainder of the alg can continue as in "Immediate".
+        ;; 4. This continues until the new-route elements are consumed, or we reach the end of the query.
+        ;; Overall this is a static analysis of possible routes, so the current query doesn't matter since we're "skipping"
+        ;; over the dynamic queries of the router nodes.
+        (loop [{:keys [component]} root path new-route]
+          (when (and component (router? component))
+            (let [{:keys [target matching-prefix]} (route-target component path)
+                  target-ast     (some-> target (prim/get-query state-map) prim/query->ast)
+                  prefix-length  (count matching-prefix)
+                  remaining-path (vec (drop prefix-length path))
+                  segment        (route-segment+ target)
+                  params         (reduce
+                                   (fn [p [k v]] (if (keyword? k) (assoc p k v) p))
+                                   {}
+                                   (map (fn [a b] [a b]) segment matching-prefix))
+                  router-ident   (prim/get-ident component {})
+                  router-id      (-> router-ident second)
+                  target-ident   (will-enter+ target reconciler params)
+                  event-data     (merge
+                                   {:error-timeout 5000 :deferred-timeout 100}
+                                   timeouts
+                                   {:router (vary-meta router-ident assoc :component component)
+                                    :target (vary-meta target-ident assoc :component target)})]
+              (if-not (uism/get-active-state reconciler router-id)
+                (uism/begin! this RouterStateMachine router-id
+                  {:router (uism/with-actor-class router-ident component)}
+                  event-data)
+                (uism/trigger! reconciler router-id :route! event-data))
+              (when (seq remaining-path)
+                (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))))))
+
+(comment
+  (prim/defsc SettingsPaneRouter [this {:fulcro.incubator.dynamic-routing/keys [id current-route] :as props}]
+    {:query         (fn [] [:fulcro.incubator.dynamic-routing/id [:fulcro.incubator.ui-state-machines/asm-id :SettingsPaneRouter]
+                            {:fulcro.incubator.dynamic-routing/current-route (prim/get-query Pane1)}
+                            {:alt0 (prim/get-query Pane2)}])
+     :ident         (fn [] [:fulcro.incubator.dynamic-routing/id :SettingsPaneRouter])
+     :protocols     [static dr/Router
+                     (get-targets [_] #{Pane1 Pane2})]
+     :initial-state (fn [params]
+                      {:fulcro.incubator.dynamic-routing/id            :SettingsPaneRouter
+                       :fulcro.incubator.dynamic-routing/current-route (prim/get-initial-state Pane1 params)
+                       :alt0                                           (prim/get-initial-state Pane1 {})})}
+    (let [current-state (get-in props [[:fulcro.incubator.ui-state-machines/asm-id :SettingsPaneRouter]
+                                       :fulcro.incubator.ui-state-machines/active-state])]
+      (case current-state
+        :initial (dom/div "Just Started.")
+        :pending (dom/div "LOADING...")
+        :failed (dom/div "Screwed.")
+        (:deferred :routed) (if-let [class (dr/current-route-class this)]
+                              (let [factory (prim/factory class)]
+                                (factory current-route)))
+        nil))))
 
 #?(:clj
-   (defn defrouter* [env router-sym router-targets]
-     (let [id                   (name (gensym (name router-sym)))
+   (defn compile-error [env form message]
+     (throw (ana/error (merge env (some-> form meta)) message {}))))
+
+#?(:clj (s/def ::router-targets (s/coll-of symbol? :type vector?)))
+#?(:clj (s/def ::initial-ui list?))
+#?(:clj (s/def ::loading-ui list?))
+#?(:clj (s/def ::failed-ui list?))
+#?(:clj (s/def ::defrouter-options (s/keys :req-un [::router-targets] :opt-un [::initial-ui ::loading-ui ::failed-ui])))
+
+#?(:clj
+   (defn defrouter* [env router-sym options]
+     (when-not (map? options)
+       (compile-error env options "defrouter requires a literal map of options."))
+     (when-not (s/valid? ::defrouter-options options)
+       (compile-error env options (str "defrouter options are invalid: " (s/explain-str ::defrouter-options options))))
+     (let [{:keys [router-targets initial-ui loading-ui failed-ui]} options
+           id                   (-> router-sym name gensym name keyword)
            query                (into [::id
+                                       [::uism/asm-id id]
                                        {::current-route `(prim/get-query ~(first router-targets))}]
                                   (map-indexed
                                     (fn [idx s] {(keyword (str "alt" idx)) `(prim/get-query ~s)})
@@ -260,18 +357,44 @@
                                     (rest router-targets)))
            ident-method         (apply list `(fn [] [::id ~id]))
            get-targets-method   (apply list `(~'get-targets [~'c] ~(set router-targets)))
-           initial-state-lambda (apply list `(fn [~'params] ~initial-state-map))]
+           initial-state-lambda (apply list `(fn [~'params] ~initial-state-map))
+           default-cases        (cond-> [:routed :deferred]
+                                  (nil? initial-ui) (conj :initial)
+                                  (nil? loading-ui) (conj :pending)
+                                  (nil? failed-ui) (conj :failed))
+           render-cases         (apply list (cond-> `[case ~'current-state
+                                                      ~(apply list default-cases) (if-let [~'class (fulcro.incubator.dynamic-routing/current-route-class ~'this)]
+                                                                                    (let [~'factory (prim/factory ~'class)]
+                                                                                      (~'factory ~'current-route)))]
+                                              initial-ui (into [:initial initial-ui])
+                                              loading-ui (into [:pending loading-ui])
+                                              failed-ui (into [:failed failed-ui])
+                                              initial-ui (into [initial-ui]) ; default, if defined
+                                              (not initial-ui) (into [nil])))]
        `(prim/defsc ~router-sym [~'this {::keys [~'id ~'current-route] :as ~'props}]
           {:query         ~query
            :ident         ~ident-method
            :protocols     [~'static fulcro.incubator.dynamic-routing/Router
                            ~get-targets-method]
            :initial-state ~initial-state-lambda}
-          (if-let [~'class (fulcro.incubator.dynamic-routing/current-route-class ~'this)]
-            (let [~'factory (prim/factory ~'class)]
-              (~'factory ~'current-route)))))))
+          (let [~'current-state (get-in ~'props [[:fulcro.incubator.ui-state-machines/asm-id ~id]
+                                                 :fulcro.incubator.ui-state-machines/active-state])]
+            ~render-cases)))))
 
 #?(:clj
-   (defmacro defrouter [router-sym & router-targets]
-     (defrouter* &env router-sym router-targets)))
+   (defmacro defrouter
+     "Define a router. The options are:
 
+     `:router-targets` - (REQUIRED) A *vector* of ui components that are router targets. The first one is considered the \"default\".
+     `:initial-ui` - (optional) Dom to render when the router has yet to route.
+     `:loading-ui` - (optional) Dom to render when there is a pending route (after :deferred-timeout millis).
+     `:failed-ui` - (optional) Dom to render when the route has failed to resolve after :error-timeout millis.
+
+     If any ui parameter is missing, then the default will be whatever the current state of the router is/was showing.
+     "
+     [router-sym options]
+     (defrouter* &env router-sym options)))
+
+#?(:clj
+   (s/fdef defrouter
+     :args (s/cat :sym symbol? :options ::defrouter-options)))

@@ -4,9 +4,9 @@
   (:require
     [clojure.set :as set]
     [clojure.spec.alpha :as s]
-    [clojure.spec.test.alpha :as st]
     [fulcro.logging :as log]
     [fulcro.client.data-fetch :as df]
+    [fulcro.client.util]
     [fulcro.client.impl.data-targeting :as dft]
     [fulcro.client.impl.protocols :as fcip]
     [fulcro.client.mutations :as m :refer [defmutation]]
@@ -188,8 +188,7 @@
   [env state-id]
   [::env ::state-id => ::env]
   (if (valid-state? env state-id)
-    (do (log/debug "Activating " state-id)
-        (assoc-in env (asm-path env ::active-state) state-id))
+    (assoc-in env (asm-path env ::active-state) state-id)
     (do
       (log/error "Activate called for invalid state: " state-id)
       env)))
@@ -397,7 +396,7 @@
                                                                            ::event-id error-event}
                                                                     error-data (assoc ::event-data error-data)))]))
       (do
-        (log/debug "A fallback occurred, but no event was defined by the client. Sending generic event.")
+        (log/warn "A fallback occurred, but no event was defined by the client. Sending generic ::uism/load-error event.")
         (defer
           #(prim/transact! reconciler [(trigger-state-machine-event (cond-> {::asm-id   asm-id
                                                                              ::event-id ::load-error}))]))))))
@@ -458,7 +457,6 @@
   (let [{::keys [js-timer]} (asm-value env [::active-timers timer-id])
         real-js-timer (-> js-timer meta :timer)]
     (when real-js-timer
-      (log/debug "Clearing timeout on " timer-id)
       (clear-js-timeout! real-js-timer))
     (-> env
       (update-in (asm-path env [::active-timers]) dissoc timer-id))))
@@ -482,9 +480,7 @@
             (cond-> env
               (and (not state-changed?) target-state) (activate target-state)))
           ;; IMPORTANT: UNDO value changes if the predicate is disabled
-          (do
-            (log/debug "Undoing changes from value-changed")
-            original-env)))
+          original-env))
       nil)))
 
 (defn active-state-handler
@@ -499,7 +495,7 @@
     (if handler
       handler
       (let [{::keys [event-id]} env]
-        (log/error "UNEXPECTED EVENT: Did not find a way to handle event" event-id "in the current active state:" current-state)
+        (log/warn "UNEXPECTED EVENT: Did not find a way to handle event" event-id "in the current active state:" current-state)
         identity))))
 
 (defn- ui-refresh-list
@@ -521,12 +517,9 @@
       (fn [env {::keys [timeout event-id event-data timer-id] :as descriptor}]
         (let [current-timer (get-js-timer env timer-id)
               js-timer      (set-js-timeout! (fn []
-                                               (log/debug "Sending " event-id "due to timeout of" timer-id "after" timeout "ms")
                                                (trigger! reconciler asm-id event-id (or event-data {}))) timeout)
               descriptor    (update-in descriptor [::js-timer] vary-meta assoc :timer js-timer)]
-          (log/debug "Scheduled timer" timer-id)
           (when current-timer
-            (log/debug "Resetting active timer" timer-id)
             (clear-js-timeout! current-timer))
           (assoc-in env (asm-path env [::active-timers timer-id]) descriptor)))
       env
@@ -558,7 +551,6 @@
                   (into refresh-list (trigger-state-machine-event! mutation-env event)))
           refresh-list
           queued-triggers)]
-    (log/info "Triggering refreshes on " result)
     result))
 
 (defn trigger-state-machine-event!
@@ -603,13 +595,11 @@
   "Mutation: Trigger an event on an active state machine"
   [{::keys [event-id event-data asm-id] :as params}]
   (action [{:keys [reconciler] :as env}]
-    (log/debug "Triggering state machine event " event-id)
     (let [to-refresh (trigger-state-machine-event! env params)]
-      (log/debug "Queuing actor refreshes" to-refresh)
       ;; IF this is triggered from a post-mutation event and more than a request-animation-frame amount of time has
       ;; elapsed THEN we have NO access to doing remoting (from post mutations), but the call to queue will end up
       ;; running a React render on THIS thread, and any mutations/loads within React lifecycle methods will be lost.
-      (defer #(fcip/queue! reconciler to-refresh)))
+      (defer (fn [] (fulcro.client.util/force-render reconciler to-refresh))))
     true))
 
 (defn set-string!
@@ -645,14 +635,16 @@
 (defmutation begin
   "Mutation to begin a state machine. Use `begin!` instead."
   [{::keys [asm-id event-data] :as params}]
-  (action [{:keys [state] :as env}]
+  (action [{:keys [reconciler state] :as env}]
     (swap! state (fn [s]
                    (-> s
                      (assoc-in [::asm-id asm-id] (new-asm params)))))
-    (trigger-state-machine-event! env (cond-> {::event-id   ::started
-                                               ::asm-id     asm-id
-                                               ::event-data {}}
-                                        event-data (assoc ::event-data event-data)))))
+    (let [to-refresh (trigger-state-machine-event! env (cond-> {::event-id   ::started
+                                                                ::asm-id     asm-id
+                                                                ::event-data {}}
+                                                         event-data (assoc ::event-data event-data)))]
+      (fcip/queue! reconciler to-refresh))))
+
 (mi/declare-mutation begin `begin)
 
 (defn derive-actor-idents
@@ -772,7 +764,6 @@
                             :params (dissoc mp ::ok-event ::error-event ::mutation
                                       ::mutation-context ::ok-data ::error-data
                                       ::mutation-remote ::asm-id)))]
-        (log/debug "explicit remote is " mutation-remote)
         (cond-> {:refresh                     to-refresh
                  (or mutation-remote :remote) (pm/pessimistic-mutation fixed-env)}
           ok-event (assoc :ok-action (fn [] (mtrigger! fixed-env actor-ident asm-id ok-event ok-data)))
