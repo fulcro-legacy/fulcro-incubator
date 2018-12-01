@@ -52,4 +52,4 @@
                      (let [~'factory (prim/factory ~'class)]
                        (~'factory ~'current-route)))
                    :initial (~'dom/div nil "TODO")
-                   nil)))))
+                   (~'dom/div nil "TODO"))))))
