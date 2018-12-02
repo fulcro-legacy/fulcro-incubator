@@ -32,8 +32,12 @@
                    (route-segment [_] ["pane1"])
                    (will-enter [_ _ _] (dr/route-immediate [:COMPONENT/by-id :pane1]))
                    dr/RouteLifecycle
-                   (will-leave [this props] true)]}
+                   (will-leave [this props]
+                     (js/console.log "Leaving pane1")
+                     true)]}
   (dom/div (str "PANE 1")))
+
+(declare SettingsPaneRouter)
 
 (defsc Pane2 [this {:keys [:x] :as props}]
   {:query         [:x]
@@ -43,10 +47,13 @@
                    (route-segment [_] ["pane2"])
                    (will-enter [_ _ _] (dr/route-immediate [:COMPONENT/by-id :pane2]))
                    dr/RouteLifecycle
-                   (will-leave [this props] true)]}
-  (dom/div (str "PANE 2")))
+                   (will-leave [this props] (js/console.log "Deny pane2")
+                     true)]}
+  (dom/div
+    (dom/button {:onClick #(dr/change-route-relative this SettingsPaneRouter ["pane1"])} "Relative route to pane 1")
+    (str "PANE 2")))
 
-(defrouter SettingsPaneRouter
+(defrouter SettingsPaneRouter [this props]
   {:router-targets [Pane1 Pane2]})
 
 (def ui-settings-pane-router (prim/factory SettingsPaneRouter))
@@ -60,7 +67,7 @@
                    (route-segment [_] ["settings"])
                    (will-enter [_ _ _] (dr/route-immediate [:COMPONENT/by-id :settings]))
                    dr/RouteLifecycle
-                   (will-leave [this props] true)]}
+                   (will-leave [this props] (js/console.log "Leaving settings") true)]}
   (dom/div
     (str "Settings: x = " x)
     (ui-settings-pane-router panes)))
@@ -71,22 +78,32 @@
    :protocols [static dr/RouteTarget
                (route-segment [_] ["user" :user-id])
                (will-enter [_ reconciler {:keys [user-id]}]
-                 (let [id 1]
-                   (df/load reconciler [:user/id id] User {:post-mutation        `dr/target-ready
-                                                           :marker               false
-                                                           :post-mutation-params {:target [:user/id id]}})
-                   (dr/route-deferred [:user/id id])))
+                 (when-let [user-id (some-> user-id (js/parseInt))]
+                   (dr/route-deferred [:user/id user-id]
+                     #(df/load reconciler [:user/id user-id] User {:post-mutation        `dr/target-ready
+                                                                   :marker               false
+                                                                   :post-mutation-params {:target [:user/id user-id]}}))))
                dr/RouteLifecycle
-               (will-leave [this props] true)]}
+               (will-leave [this props] (js/console.log "Leaving user " (:user/id props)) true)]}
   (dom/div (str "User: name = " name)))
 
-(defrouter RootRouter2
-  {:router-targets [Settings User]
-   :initial-ui     (dom/div "new!")
-   :loading-ui     (dom/div "loading a user...")
-   :failed-ui      (do
-                     (js/console.log :error)
-                     (dom/div "Ooops!"))})
+(defrouter RootRouter2 [this {:keys [current-state pending-path-segment]}]
+  {:router-targets     [Settings User]
+   :componentDidUpdate (fn [pp ps]
+                         (let [current-state        (uism/get-active-state this :RootRouter2)
+                               sm-env               (uism/state-machine-env (prim/component->state-map this)
+                                                      nil :RootRouter2 :noop {})
+                               pending-path-segment (uism/retrieve sm-env :pending-path-segment)
+                               current-path         (uism/retrieve sm-env :path-segment)]
+                           (js/console.log :rr2-updated current-state :pending-path pending-path-segment
+                             :current-path current-path)))}
+  (case current-state
+    :pending (dom/div "Loading a user..."
+               (dom/button {:onClick #(dr/change-route this ["settings" "pane2"])} "cancel"))
+    :failed (do
+              (dom/div "Ooops!")
+              (dom/button {:onClick #(dr/change-route this ["settings"])} "Go to settings"))
+    (dom/div "...")))
 
 (def ui-root-router-2 (prim/factory RootRouter2))
 
@@ -98,6 +115,7 @@
     (dom/button {:onClick (fn [] (dr/change-route this ["settings"]))} "Change route to /settings")
     (dom/button {:onClick (fn [] (dr/change-route this ["settings" "pane1"]))} "Change route to /settings/pane1")
     (dom/button {:onClick (fn [] (dr/change-route this ["settings" "pane2"]))} "Change route to /settings/pane2")
+    (dom/button {:onClick (fn [] (js/console.log (dr/current-route this this)))} "Log current route")
     (ui-root-router-2 router)))
 
 (server/defquery-entity :user/id

@@ -54,7 +54,8 @@
 (s/def ::timeout pos-int?)
 (s/def ::timer-id (s/with-gen any? #(s/gen #{:timer-1 42})))
 (s/def ::cancel-fn (s/with-gen fn? #(s/gen #{#{:event! :other!}})))
-(s/def ::cancel-on (s/with-gen #(-> % meta :cancel-on fn?) #(s/gen #{(with-meta {} {:cancel-on (fn [e] true)})})))
+(s/def ::cancel-on (s/with-gen (fn fn-or-set* [i] (let [f (-> i meta :cancel-on )]
+                                                    (or (fn? f) (set? f)))) #(s/gen #{(with-meta {} {:cancel-on (fn [e] true)})})))
 (s/def ::js-timer (s/with-gen #(-> % meta :timer boolean) #(s/gen #{(with-meta {} {:timer {}})})))
 (s/def ::timeout-descriptor (s/keys :req [::js-timer ::timeout ::event-id ::timer-id ::cancel-on] :opt [::event-data]))
 (s/def ::queued-timeouts (s/coll-of ::timeout-descriptor))
@@ -93,7 +94,7 @@
 (s/def ::event-names (s/coll-of keyword? :kind set?))
 (s/def ::target-state keyword?)
 (s/def ::state-machine-definition (s/with-gen
-                                    (s/keys :req [::actor-names ::states] :opt [::aliases ::plugins ::event-names])
+                                    (s/keys :req [::states] :opt [::actor-names ::aliases ::plugins ::event-names])
                                     #(s/gen #{{::actor-names #{:a}
                                                ::states      {:initial {::handler (fn [env] env)}}}})))
 
@@ -527,7 +528,7 @@
 (defn- ui-refresh-list
   "Returns a vector of things to refresh in Fulcro based on the final state of an active SM env."
   [env]
-  (let [actor-idents (or (some-> env (get-in (asm-path env ::actor->ident)) vals) [])]
+  (let [actor-idents (or (some-> env (get-in (asm-path env ::actor->ident)) vals vec) [])]
     actor-idents))
 (>fdef ui-refresh-list
   [env]
