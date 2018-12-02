@@ -1,4 +1,5 @@
 (ns fulcro.incubator.routing-ws
+  (:require-macros [fulcro.incubator.dynamic-routing :refer [defsc-route-target defrouter]])
   (:require
     [fulcro.incubator.ui-state-machines :as uism :refer [defstatemachine]]
     [fulcro-spec.core :refer [assertions component]]
@@ -14,41 +15,34 @@
     [fulcro.client.mutations :as m]
     [taoensso.timbre :as log]
     [fulcro.client.data-fetch :as df]
-    [fulcro.incubator.dynamic-routing :as dr :refer [defrouter]]))
+    [fulcro.incubator.dynamic-routing :as dr]
+    [fulcro.client :as fc]))
 
-;; TASK: Write a macro that simplifies this:
-;; (defsc-router-target Pane2 [this props]
-;;   {... normal defsc stuff...
-;;    :route-segment ["pane2"]
-;;    :will-enter (fn [c reconciler route-params] ...) ; optional, defaults to ident of component
-;;    :will-leave (fn [this props] boolean) ; optional, defaults to true
-;;   }
-;;   ...normal body...)
-(defsc Pane1 [this {:keys [:y] :as props}]
-  {:query         [:y]
-   :ident         (fn [] [:COMPONENT/by-id :pane1])
-   :initial-state {:y 1}
-   :protocols     [static dr/RouteTarget
-                   (route-segment [_] ["pane1"])
-                   (will-enter [_ _ _] (dr/route-immediate [:COMPONENT/by-id :pane1]))
-                   dr/RouteLifecycle
-                   (will-leave [this props]
-                     (js/console.log "Leaving pane1")
-                     true)]}
+(defonce fulcro-app (atom nil))
+
+(defsc-route-target Pane1 [this {:keys [:y] :as props}]
+  {:query           [:y]
+   :ident           (fn [] [:COMPONENT/by-id :pane1])
+   :initial-state   {:y 1}
+   :route-segment   (fn [] ["pane1"])
+   :route-cancelled (fn [_])
+   :will-enter      (fn [_ _] (dr/route-immediate [:COMPONENT/by-id :pane1]))
+   :will-leave      (fn [_]
+                      (js/console.log "Leaving pane1")
+                      true)}
   (dom/div (str "PANE 1")))
 
 (declare SettingsPaneRouter)
 
-(defsc Pane2 [this {:keys [:x] :as props}]
-  {:query         [:x]
-   :ident         (fn [] [:COMPONENT/by-id :pane2])
-   :initial-state {:x 1}
-   :protocols     [static dr/RouteTarget
-                   (route-segment [_] ["pane2"])
-                   (will-enter [_ _ _] (dr/route-immediate [:COMPONENT/by-id :pane2]))
-                   dr/RouteLifecycle
-                   (will-leave [this props] (js/console.log "Deny pane2")
-                     true)]}
+(defsc-route-target Pane2 [this {:keys [:x] :as props}]
+  {:query           [:x]
+   :ident           (fn [] [:COMPONENT/by-id :pane2])
+   :initial-state   {:x 1}
+   :route-segment   (fn [] ["pane2"])
+   :route-cancelled (fn [_])
+   :will-enter      (fn [_ _] (dr/route-immediate [:COMPONENT/by-id :pane2]))
+   :will-leave      (fn [_] (js/console.log "Leave pane2")
+                      true)}
   (dom/div
     (dom/button {:onClick #(dr/change-route-relative this SettingsPaneRouter ["pane1"])} "Relative route to pane 1")
     (str "PANE 2")))
@@ -58,33 +52,36 @@
 
 (def ui-settings-pane-router (prim/factory SettingsPaneRouter))
 
-(defsc Settings [this {:keys [:x :panes] :as props}]
-  {:query         [:x {:panes (prim/get-query SettingsPaneRouter)}]
-   :ident         (fn [] [:COMPONENT/by-id :settings])
-   :initial-state {:x     :param/x
-                   :panes {}}
-   :protocols     [static dr/RouteTarget
-                   (route-segment [_] ["settings"])
-                   (will-enter [_ _ _] (dr/route-immediate [:COMPONENT/by-id :settings]))
-                   dr/RouteLifecycle
-                   (will-leave [this props] (js/console.log "Leaving settings") true)]}
+(defsc-route-target Settings [this {:keys [:x :panes] :as props}]
+  {:query           [:x {:panes (prim/get-query SettingsPaneRouter)}]
+   :ident           (fn [] [:COMPONENT/by-id :settings])
+   :initial-state   {:x     :param/x
+                     :panes {}}
+   :route-segment   (fn [] ["settings"])
+   :route-cancelled (fn [_])
+   :will-enter      (fn [_ _] (dr/route-immediate [:COMPONENT/by-id :settings]))
+   :will-leave      (fn [_] (js/console.log "Leaving settings") true)}
   (dom/div
     (str "Settings: x = " x)
     (ui-settings-pane-router panes)))
 
-(defsc User [this {:keys [user/id user/name] :as props}]
-  {:query     [:user/id :user/name]
-   :ident     [:user/id :user/id]
-   :protocols [static dr/RouteTarget
-               (route-segment [_] ["user" :user-id])
-               (will-enter [_ reconciler {:keys [user-id]}]
-                 (when-let [user-id (some-> user-id (js/parseInt))]
-                   (dr/route-deferred [:user/id user-id]
-                     #(df/load reconciler [:user/id user-id] User {:post-mutation        `dr/target-ready
-                                                                   :marker               false
-                                                                   :post-mutation-params {:target [:user/id user-id]}}))))
-               dr/RouteLifecycle
-               (will-leave [this props] (js/console.log "Leaving user " (:user/id props)) true)]}
+(defsc-route-target User [this {:keys [user/id user/name] :as props}]
+  {:query           [:user/id :user/name]
+   :ident           [:user/id :user/id]
+   :route-segment   (fn [] ["user" :user-id])
+   :route-cancelled (fn [params]
+                      ;; js network mock doesn't support cancel, but this is how you'd do it:
+                      (when @fulcro-app
+                        (fc/abort-request! @fulcro-app :user-load))
+                      (js/console.log :user-route-cancelled params))
+   :will-enter      (fn [reconciler {:keys [user-id]}]
+                      (when-let [user-id (some-> user-id (js/parseInt))]
+                        (dr/route-deferred [:user/id user-id]
+                          #(df/load reconciler [:user/id user-id] User {:post-mutation        `dr/target-ready
+                                                                        :abort-id             :user-load
+                                                                        :marker               false
+                                                                        :post-mutation-params {:target [:user/id user-id]}}))))
+   :will-leave      (fn [props] (js/console.log "Leaving user " (:user/id props)) true)}
   (dom/div (str "User: name = " name)))
 
 (defrouter RootRouter2 [this {:keys [current-state pending-path-segment]}]
@@ -130,6 +127,7 @@
   (ct.fulcro/fulcro-card
     {::f.portal/root       Root2
      ::f.portal/wrap-root? false
-     ::f.portal/app        {:started-callback (fn [{:keys [reconciler]}]
+     ::f.portal/app        {:started-callback (fn [{:keys [reconciler] :as app}]
+                                                (reset! fulcro-app app)
                                                 (dr/change-route reconciler ["settings" "pane1"]))
                             :networking       (server/new-server-emulator (server/fulcro-parser) 1000)}}))

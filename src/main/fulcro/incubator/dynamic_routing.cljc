@@ -1,25 +1,30 @@
 (ns fulcro.incubator.dynamic-routing
-  #?(:cljs (:require-macros fulcro.incubator.dynamic-routing))
+  #?(:cljs (:require-macros [fulcro.incubator.dynamic-routing :refer [defsc-route-target]]))
   (:require
-    [ghostwheel.core :as g :refer [>fdef => ?]]
+    [ghostwheel.core :refer [>fdef => ?]]
+    #?(:clj [fulcro.incubator.defsc-extensions :as dext])
     [fulcro.incubator.ui-state-machines :as uism :refer [defstatemachine]]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
     [taoensso.timbre :as log]
     [clojure.spec.alpha :as s]
-    #?(:clj [cljs.analyzer :as ana])))
+    #?(:clj [cljs.analyzer :as ana])
+    [fulcro.util :as futil]))
 
 ;; STATIC protocol.
 (defprotocol RouteTarget
   (route-segment [class] "Returns a vector that describes the sub-path that a given route represents. String elements represent
   explicit path elements, and keywords represent variable values (which are always pulled as strings).")
+  (route-cancelled [class route-params] "Called if this target was in a deferred state and a different routing choice was made. Is given the same route parameters that were sent to `will-enter`.")
   (will-enter [class reconciler params] "Called before a route target is activated (if the route segment of interest has changed and the
   target of the result is this target).  MUST return (r/route-immediate ident) or (r/route-deferred ident) to indicate
   what ident should be used in app state to connect the router's join.  If deferred, the router must cause a call to
   the r/target-ready mutation (or use the target-ready* mutation helper) with a {:target ident} parameter to indicate
   that the route target is loaded and ready for display.
 
-  `params` will be a map from any keywords found in `route-segment` to the string value of that path element."))
+  `params` will be a map from any keywords found in `route-segment` to the string value of that path element.
+
+  WARNING: This method MUST be side-effect free."))
 
 (defn route-segment+
   "Universal CLJC version of route-segment.  Don't use the protocol method in CLJ."
@@ -288,7 +293,7 @@
                                (map (fn [a b] [a b]) segment matching-prefix))
               target-ident   (will-enter+ target reconciler params)]
           (when (vector? target-ident)
-            (swap! result conj target-ident))
+            (swap! result conj (vary-meta target-ident assoc :component target :params params)))
           (when (seq remaining-path)
             (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))
     @result))
@@ -307,12 +312,16 @@
            ast        (prim/query->ast root-query)
            root       (ast-node-for-live-router reconciler ast)
            to-signal  (atom [])
+           to-cancel  (atom [])
            _          (loop [{:keys [component] :as node} root new-path-remaining new-path]
                         (when (and component (router? component))
                           (let [new-target    (first new-path-remaining)
                                 router-ident  (prim/get-ident component {})
                                 active-target (get-in state-map (conj router-ident ::current-route))
+                                {:keys [target]} (get-in state-map (conj router-ident ::pending-route))
                                 next-router   (some #(ast-node-for-live-router reconciler %) (:children node))]
+                            (when (futil/ident? target)
+                              (swap! to-cancel conj target))
                             (when (and (not= new-target active-target) (vector? active-target))
                               (when-let [c (prim/ref->any reconciler active-target)]
                                 (swap! to-signal conj c)))
@@ -322,6 +331,10 @@
            result     (atom true)]
        (doseq [c components]
          (swap! result #(and % (will-leave c (prim/props c)))))
+       (when @result
+         (doseq [t @to-cancel]
+           (let [{:keys [component params]} (some-> t meta)]
+             (route-cancelled component params))))
        @result)))
 
 (defn change-route-relative
@@ -360,7 +373,7 @@
                                         timeouts
                                         {:path-segment matching-prefix
                                          :router       (vary-meta router-ident assoc :component component)
-                                         :target       (vary-meta target-ident assoc :component target)})]
+                                         :target       (vary-meta target-ident assoc :component target :params params)})]
                 (completing-action)
                 (if-not (uism/get-active-state reconciler router-id)
                   (uism/begin! this-or-reconciler RouterStateMachine router-id
@@ -491,3 +504,6 @@
 #?(:clj
    (s/fdef defrouter
      :args (s/cat :sym symbol? :arglist vector? :options map? :body (s/* any?))))
+
+#?(:clj
+   (dext/defextended-defsc defsc-route-target [[`RouteLifecycle false] [`RouteTarget true]]))
