@@ -29,6 +29,12 @@ For now it is here, and the documentation is in https://github.com/fulcrologic/f
 
 Try them for your login form, and I bet you'll suddenly want to use them everywhere!
 
+== Improved UI Routing
+
+A new routing system based on dynamic queries with various cool features is in the dynamic-routing namespace. See
+the documentation at https://github.com/fulcrologic/fulcro-incubator/blob/develop/dynamic-routing.adoc[dynamic-routing.adoc]
+
+
 == DB Helpers
 
 The https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/main/fulcro/incubator/db_helpers.cljc[`fulcro.incubator.db-helpers`]
