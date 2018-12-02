@@ -2,7 +2,7 @@
   "Support for easily defining mutations that automatically update components based on the status and result of a mutation.
   Includes support for a loading, error, and complete status, and makes writing consistent UIs around pessimistic
   mutation (instead of optimistic) easier."
-  #?(:cljs (:require-macros [fulcro.incubator.pessimistic-mutations]))
+  #?(:cljs (:require-macros fulcro.incubator.pessimistic-mutations))
   (:require
     [fulcro.incubator.db-helpers :as db.h]
     [fulcro.incubator.mutation-interface :as mi]

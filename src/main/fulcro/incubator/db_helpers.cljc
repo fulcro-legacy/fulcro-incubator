@@ -1,5 +1,5 @@
 (ns fulcro.incubator.db-helpers
-  #?(:cljs (:require-macros [fulcro.incubator.db-helpers :refer [defpmutation]]))
+  #?(:cljs (:require-macros fulcro.incubator.db-helpers))
   (:require [clojure.spec.alpha :as s]
             [fulcro.client.mutations :as mutations]
             [fulcro.client.primitives :as fp]

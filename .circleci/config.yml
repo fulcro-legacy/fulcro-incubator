@@ -22,7 +22,7 @@ jobs:
       - checkout
       - restore_cache:
           key: clj-{{ checksum "deps.edn" }}
-      - run: clojure -A:dev:provided:test:ci-test unit
+      - run: clojure -A:dev:ci-test unit
       - save_cache:
           paths:
             - ~/.m2
