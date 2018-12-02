@@ -115,6 +115,8 @@ WARNING: `will-enter` MUST NOT side-effect, but must instead do any I/O in the l
 
 Route targets can be singletons or regular components that have multiple instances.  In the latter case you must be sure that the ident returned from `will-enter` points to valid data in state by the time the route is resolved.
 
+NOTE: There is a complete working demo in https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/workspaces/fulcro/incubator/routing_ws.cljs[`routing_ws.cljs`].
+
 == Initial Route
 
 The compostion of routers in your UI will result in some overall route that is the "default" at application start.  This is simply the first element of each `defrouter` that is reachable from your root.

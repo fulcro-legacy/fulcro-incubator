@@ -5,7 +5,7 @@
             [fulcro.incubator.ui-state-machines :as uism]
             [fulcro.client.primitives :as prim]))
 
-(deftest defrouter-macro-tests
+#_(deftest defrouter-macro-tests
   (let [actual       (dr/defrouter* {} 'ARouter {:router-targets #{'A 'B}})
         [nm sym args options body] actual
         {:keys [query ident protocols initial-state]} options
