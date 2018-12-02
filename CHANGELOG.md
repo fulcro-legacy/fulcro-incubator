@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.22
+------
+- Added dynamic routing
+
 0.0.21
 ------
 - Added the ability to trigger events on other state machines from within a handler.
