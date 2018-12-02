@@ -2,7 +2,7 @@
 
 0.0.22
 ------
-- Added dynamic routing
+- Added dynamic routing with docs
 
 0.0.21
 ------
