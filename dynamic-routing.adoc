@@ -81,7 +81,8 @@ Most of the novelty about routes can now be encoded into normal components with 
 
 ```
 (ns app
-  (require
+  (:require-macros [fulcro.incubator.dynamic-routing :as dr :refer [defrouter defsc-route-target]])
+  (:require
     ...
     [fulcro.incubator.dynamic-routing :as dr :refer [defrouter]]))
 
@@ -89,9 +90,20 @@ Most of the novelty about routes can now be encoded into normal components with 
  {:protocols [static dr/RouteTarget
               (route-segment [_] ...path segments...)
               (will-enter [_ reconciler route-params] ...defer or immediate...)
-              (route-cancelled [route-params] ...called if deferred route to here is cancelled before it completes...)
-              dr/RouteLifecycle
+              (route-cancelled [_ route-params] ...called if deferred route to here is cancelled before it completes...)
+              dr/RouteLifecycle ; non-static, so `this` is available
               (will-leave [this props] ...true or false...)]}
+ (dom/div ...))
+
+;; OR using an extended defsc macro:
+(defsc-route-target X [this props]
+ {...
+  :route-segment   (fn [] ...path segments...)
+  :will-enter      (fn [reconciler route-params] ...defer or immediate...)
+  :route-cancelled (fn [route-params] ...called if deferred route to here is cancelled before it completes...)
+  ;; `this` is avaiable in will-leave, but not in the above
+  :will-leave      (fn [props] ...true or false...)]}
+ (dom/div ...))
 ```
 
 `route-segment`:: A (relative) path segment that this component can "consume" from an incoming route. This is purely static data, and the argument is the class itself (to satisfy protocols). The current composition of routing targets in the UI determines the overall "absolute" path of a route. Each `router` in the UI should be thought of as a stand-in for a "/" in an HTML5 URI path.
