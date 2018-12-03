@@ -1,4 +1,35 @@
 = Routing Features
+:author: Tony Kay
+:revdate: December 2, 2018
+:revnumber: 2
+:lang: en
+:encoding: UTF-8
+:doctype: book
+:source-highlighter: coderay
+:source-language: clojure
+:toc: left
+:toclevels: 2
+:sectlinks:
+:sectanchors:
+:leveloffset: 1
+:sectnums:
+:imagesdir: img
+:scriptsdir: js
+:imagesoutdir: docs/img
+:favicon: assets/favicon.ico
+
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+ifdef::env-github[]
+toc::[]
+endif::[]
+
 
 The routing system under design has the following feature requirements:
 
@@ -25,7 +56,7 @@ Dynamic routing in Fulcro can be easily facilitated by leveraging the UI query, 
 
 Take the following UI layout:
 
-[ditaa, image=boo.jpg]
+[ditaa, target=tree]
 ....
 
    +-------+
