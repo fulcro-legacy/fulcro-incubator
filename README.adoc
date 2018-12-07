@@ -93,8 +93,9 @@ meant to be run with:
 
 === Responses and Status
 
-The status is automatically merged into the component that is transacted against (via it's ident) at the `::pm/mutation-response``
-key, and progress is merged with that component along the way so that you can write UI wrappers to handle the rendering of the different states.
+The status is automatically merged into the component that is transacted against (via it's ident) at the
+`::pm/mutation-response` key or at another key that you specified, and progress is merged with that component along the
+way so that you can write UI wrappers to handle the rendering of the different states.
 
 It can have the following values:
 
@@ -137,6 +138,14 @@ Hard Failure:: The server threw an exception or the network is down.
 
 and will be visible in `error-action` and will not be removed until you clear it (or run another mutation against
 that component).
+
+If your application can have multiple mutations happening at the same time you will need to specify different mutation
+response keys for each of them so they don't clash. To do that you need to add the `::pm/mutation-response-key`
+to your `pmutate!` parameters map:
+
+```
+(pm/pmutate! this `do-thing {::pm/mutation-response-key ::custom-mutation-response-key})
+```
 
 === Targeting and Merging the Mutation Response
 
