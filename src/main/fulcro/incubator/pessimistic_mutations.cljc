@@ -20,6 +20,20 @@
 
 (def error-states #{:api-error :network-error})
 
+(defn- get-mutation-response-key [{::keys [mutation-response-key]}]
+  (or mutation-response-key ::mutation-response))
+
+(defn- get-params-mutation-response-key [ast]
+  (or (-> ast :params ::mutation-response-key)
+      (-> ast :params :params ::mutation-response-key)
+      ::mutation-response))
+
+(defn- mutation-response-swap-keyword [mutation-response-key]
+  (let [mutation-swap-str (some-> mutation-response-key
+                            name
+                            (str "-swap"))]
+    (keyword (namespace mutation-response-key) mutation-swap-str)))
+
 (defn pessimistic-mutation
   "You must call this function in the remote of mutations that are used with `pmutate!`.
 
@@ -32,44 +46,62 @@
   [{:keys [ast ref]}]
   (when (:query ast)
     (log/error "You should not use mutation joins (returning) with `pmutate!`. Use the params of `pmutate!` instead."))
-  (some-> ast
-    (update :params dissoc ::returning ::target)
-    (cond-> (:query ast) (update :query vary-meta dissoc :component))
-    (mutations/with-target (conj ref ::mutation-response-swap))
-    (vary-meta assoc ::pessimistic-mutation true)))
+  (let [mutation-response-key (get-params-mutation-response-key ast)
+        mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)]
+    (some-> ast
+      (update :params dissoc ::returning ::target)
+      (cond-> (:query ast) (update :query vary-meta dissoc :component))
+      (mutations/with-target (conj ref mutation-response-swap-key))
+      (vary-meta assoc ::pessimistic-mutation true))))
 
 (defn- pessimistic-mutation?
   [ast]
   (-> ast meta ::pessimistic-mutation))
 
+(defn mutation-response-with-key
+  "Retrieves the mutation response from `this-or-props` (a component or props).  Can also be used against the state-map with an ident."
+  ([this-or-props {::keys [mutation-response-key] :as options}]
+   (if (fp/component? this-or-props)
+     (mutation-response-with-key (-> this-or-props fp/get-reconciler fp/app-state deref) (fp/props this-or-props) options)
+     (-> this-or-props mutation-response-key)))
+  ([state props {::keys [mutation-response-key]}]
+   (let [response (-> props mutation-response-key)]
+     (if (fulcro.util/ident? response) (get-in state response) response))))
+
 (defn mutation-response
   "Retrieves the mutation response from `this-or-props` (a component or props).  Can also be used against the state-map with an ident."
   ([this-or-props]
-   (if (fp/component? this-or-props)
-     (mutation-response (-> this-or-props fp/get-reconciler fp/app-state deref) (fp/props this-or-props))
-     (-> this-or-props ::mutation-response)))
+   (mutation-response-with-key this-or-props {::mutation-response-key ::mutation-response}))
   ([state props]
-   (let [response (-> props ::mutation-response)]
-     (if (fulcro.util/ident? response) (get-in state response) response))))
+   (mutation-response-with-key state props {::mutation-response-key ::mutation-response})))
 
 (defn- mutation-status
-  ([state props]
-   (let [response (mutation-response state props)]
+  ([state props options]
+   (let [response (mutation-response-with-key state props options)]
      (-> response ::status)))
-  ([this]
-   (-> (mutation-response this) ::status)))
+  ([this options]
+   (-> (mutation-response-with-key this options) ::status)))
 
 (defn mutation-loading?
   "Checks this props of `this` component to see if a mutation is in progress."
-  [this]
-  (= :loading (mutation-status this)))
+  ([this]
+   (mutation-loading? this {::mutation-response-key ::mutation-response}))
+  ([this options]
+   (= :loading (mutation-status this options))))
+
+(defn mutation-error-with-key?
+  "Is the mutation in error. This is detected by looking for ::mutation-errors in the ::mutation-response (map) returned by the mutation."
+  ([this options]
+   (contains? error-states (mutation-status this options)))
+  ([state props options]
+   (contains? error-states (mutation-status state props options))))
 
 (defn mutation-error?
   "Is the mutation in error. This is detected by looking for ::mutation-errors in the ::mutation-response (map) returned by the mutation."
   ([this]
-   (contains? error-states (mutation-status this)))
+   (mutation-error-with-key? this {::mutation-response-key ::mutation-response}))
   ([state props]
-   (contains? error-states (mutation-status state props))))
+   (mutation-error-with-key? state props {::mutation-response-key ::mutation-response})))
 
 (defn get-mutation
   "Runs the side-effect-free multimethod for the given (client) mutation and returns a map describing the mutation:
@@ -98,8 +130,10 @@
     ::keys [ref] :as p}]
   (action [env]
     (let [low-level-error (some-> error first second :fulcro.client.primitives/error)
-          {::keys [key]} params]
-      (db.h/swap-entity! (assoc env :ref ref) assoc ::mutation-response-swap
+          {::keys [key]} params
+          mutation-response-key (get-params-mutation-response-key p)
+          mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)]
+      (db.h/swap-entity! (assoc env :ref ref) assoc mutation-response-swap-key
         (cond-> (dissoc p ::ref :error :params)
           :always (assoc ::status :hard-error)
           key (assoc ::key key)
@@ -108,37 +142,40 @@
 
 (mutations/defmutation start-pmutation
   "INTERNAL USE mutation."
-  [{::keys [key target]}]
+  [{::keys [key target mutation-response-key]}]
   (action [{:keys [state] :as env}]
     (let [loading-marker {::status :loading
-                          ::key    key}]
-      (db.h/swap-entity! env assoc ::mutation-response {::status :loading
-                                                        ::key    key})
+                          ::key    key}
+          mutation-response-key (or mutation-response-key ::mutation-response)]
+      (db.h/swap-entity! env assoc mutation-response-key {::status :loading
+                                                          ::key    key})
       (when (and (not (data-targeting/multiple-targets? target)) (vector? target) (map? (get-in @state target)))
-        (swap! state assoc-in (conj target ::mutation-response) loading-marker)))
+        (swap! state assoc-in (conj target mutation-response-key) loading-marker)))
     nil))
 
 (mutations/defmutation finish-pmutation
   "INTERNAL USE mutation."
-  [{:keys [mutation params]}]
+  [{:keys [mutation params] :as p}]
   (action [env]
     (let [{:keys [state ref reconciler]} env
           {::keys [key target returning]} params
-          {::keys [mutation-response-swap]} (get-in @state ref)
+          mutation-response-key (get-params-mutation-response-key p)
+          mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)
+          mutation-response-swap (get-in @state (conj ref mutation-response-swap-key))
           {::keys [status]} mutation-response-swap
           hard-error? (= status :hard-error)
           api-error?  (contains? mutation-response-swap ::mutation-errors)
           had-error?  (or hard-error? api-error?)]
       (if had-error?
         (do
-          (db.h/swap-entity! env assoc ::mutation-response (merge {::status :api-error} mutation-response-swap {::key key}))
+          (db.h/swap-entity! env assoc mutation-response-key (merge {::status :api-error} mutation-response-swap {::key key}))
           (call-mutation-action :error-action env mutation params))
         (do
           ;; so the ok action can see it
           (db.h/swap-entity! env (fn [s]
                                    (-> s
-                                     (dissoc ::mutation-response-swap)
-                                     (assoc ::mutation-response (merge mutation-response-swap {::key key})))))
+                                     (dissoc mutation-response-swap-key)
+                                     (assoc mutation-response-key (merge mutation-response-swap {::key key})))))
           (when returning
             (fp/merge-component! reconciler returning mutation-response-swap))
           (when target
@@ -147,12 +184,12 @@
                 (when (nil? (second return-value-ident))
                   (log/warn "Targeted value of type " returning " did not generate a valid ident from the server return value: " mutation-response-swap))
                 (swap! (:state env) data-targeting/process-target return-value-ident target false))
-              (swap! (:state env) data-targeting/process-target (conj ref ::mutation-response-swap) target false))
-            (when (get-in @state (conj target ::mutation-response))
-              (swap! state update-in target dissoc ::mutation-response)))
+              (swap! (:state env) data-targeting/process-target (conj ref mutation-response-swap-key) target false))
+            (when (get-in @state (conj target mutation-response-key))
+              (swap! state update-in target dissoc mutation-response-key)))
           (call-mutation-action :ok-action env mutation params)
-          (db.h/swap-entity! env dissoc ::mutation-response)))
-      (db.h/swap-entity! env dissoc ::mutation-response-swap))))
+          (db.h/swap-entity! env dissoc mutation-response-key)))
+      (db.h/swap-entity! env dissoc mutation-response-swap-key))))
 
 (def ^:private fake-env {:state (atom {}) :parser (constantly {}) ; to help keep remotes from crashing
                          :ast   (prim/query->ast1 ['(noop)])})
