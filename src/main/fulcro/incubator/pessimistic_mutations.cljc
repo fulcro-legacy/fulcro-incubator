@@ -59,7 +59,9 @@
   (-> ast meta ::pessimistic-mutation))
 
 (defn mutation-response-with-key
-  "Retrieves the mutation response from `this-or-props` (a component or props).  Can also be used against the state-map with an ident."
+  "Retrieves the mutation response from `this-or-props` (a component or props). Can also be used against the state-map with an ident.
+  You can use the options map to specify the ::pm/mutation-response-key that should be used instead of the default ::pm/mutation-response:
+  {::pm/mutation-response-key ::custom-mutation-response-key}"
   ([this-or-props {::keys [mutation-response-key] :as options}]
    (if (fp/component? this-or-props)
      (mutation-response-with-key (-> this-or-props fp/get-reconciler fp/app-state deref) (fp/props this-or-props) options)
@@ -90,7 +92,9 @@
    (= :loading (mutation-status this options))))
 
 (defn mutation-error-with-key?
-  "Is the mutation in error. This is detected by looking for ::mutation-errors in the ::mutation-response (map) returned by the mutation."
+  "Is the mutation in error. This is detected by looking for ::mutation-errors in the ::mutation-response (map) returned by the mutation.
+  You can use the options map to specify the ::pm/mutation-response-key that should be used instead of the default ::pm/mutation-response:
+  {::pm/mutation-response-key ::custom-mutation-response-key}"
   ([this options]
    (contains? error-states (mutation-status this options)))
   ([state props options]
