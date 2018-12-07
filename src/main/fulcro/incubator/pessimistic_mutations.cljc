@@ -131,7 +131,7 @@
   (action [env]
     (let [low-level-error (some-> error first second :fulcro.client.primitives/error)
           {::keys [key]} params
-          mutation-response-key (get-params-mutation-response-key p)
+          mutation-response-key (get-mutation-response-key params)
           mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)]
       (db.h/swap-entity! (assoc env :ref ref) assoc mutation-response-swap-key
         (cond-> (dissoc p ::ref :error :params)
@@ -142,11 +142,11 @@
 
 (mutations/defmutation start-pmutation
   "INTERNAL USE mutation."
-  [{::keys [key target mutation-response-key]}]
+  [{::keys [key target] :as params}]
   (action [{:keys [state] :as env}]
     (let [loading-marker {::status :loading
                           ::key    key}
-          mutation-response-key (or mutation-response-key ::mutation-response)]
+          mutation-response-key (get-mutation-response-key params)]
       (db.h/swap-entity! env assoc mutation-response-key {::status :loading
                                                           ::key    key})
       (when (and (not (data-targeting/multiple-targets? target)) (vector? target) (map? (get-in @state target)))
@@ -155,11 +155,11 @@
 
 (mutations/defmutation finish-pmutation
   "INTERNAL USE mutation."
-  [{:keys [mutation params] :as p}]
+  [{:keys [mutation params]}]
   (action [env]
     (let [{:keys [state ref reconciler]} env
           {::keys [key target returning]} params
-          mutation-response-key (get-params-mutation-response-key p)
+          mutation-response-key (get-mutation-response-key params)
           mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)
           mutation-response-swap (get-in @state (conj ref mutation-response-swap-key))
           {::keys [status]} mutation-response-swap
