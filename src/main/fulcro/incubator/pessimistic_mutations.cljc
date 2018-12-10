@@ -13,7 +13,8 @@
     [clojure.spec.alpha :as s]
     [fulcro.client.primitives :as prim]
     [fulcro.client.data-fetch :as df]
-    [clojure.set :as set]))
+    [clojure.set :as set]
+    [clojure.walk :as walk]))
 
 (s/def ::returning ::fp/component-class)
 (s/def ::target ::df/target)
@@ -28,11 +29,23 @@
       (-> ast :params :params ::mutation-response-key)
       ::mutation-response))
 
+(defn- get-params-mutation-returning [ast]
+  (or (-> ast :params ::returning)
+      (-> ast :params :params ::returning)))
+
 (defn- mutation-response-swap-keyword [mutation-response-key]
   (let [mutation-swap-str (some-> mutation-response-key
                             name
                             (str "-swap"))]
     (keyword (namespace mutation-response-key) mutation-swap-str)))
+
+(defn- clean-query-components [query]
+  (walk/postwalk
+    (fn [x]
+      (if (vector? x)
+        (vary-meta x dissoc :component)
+        x))
+    query))
 
 (defn pessimistic-mutation
   "You must call this function in the remote of mutations that are used with `pmutate!`.
@@ -46,11 +59,14 @@
   [{:keys [ast ref]}]
   (when (:query ast)
     (log/error "You should not use mutation joins (returning) with `pmutate!`. Use the params of `pmutate!` instead."))
-  (let [mutation-response-key (get-params-mutation-response-key ast)
-        mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)]
+  (let [mutation-response-key      (get-params-mutation-response-key ast)
+        mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)
+        returning                  (get-params-mutation-returning ast)]
     (some-> ast
       (update :params dissoc ::returning ::target)
-      (cond-> (:query ast) (update :query vary-meta dissoc :component))
+      (cond->
+        (:query ast) (update :query clean-query-components)
+        returning (assoc :query (clean-query-components (fp/get-query returning))))
       (mutations/with-target (conj ref mutation-response-swap-key))
       (vary-meta assoc ::pessimistic-mutation true))))
 
