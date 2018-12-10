@@ -336,4 +336,4 @@ with only `:route-segment` required.
 == Full Example
 
 The workspaces source contains a full working example of this routing system in
-https://github.com/fulcrologic/fulcro-incubator/blob/feature/routing-experiment/src/workspaces/fulcro/incubator/routing_ws.cljs
+https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/workspaces/fulcro/incubator/routing_ws.cljs
