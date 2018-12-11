@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.23
+------
+- Support `::pm/mutation-return-key` on pessimistic mutations
+- Fix `pessimistic-mutation` to send correct returning query to remote
+
 0.0.22
 ------
 - Added dynamic routing with docs
