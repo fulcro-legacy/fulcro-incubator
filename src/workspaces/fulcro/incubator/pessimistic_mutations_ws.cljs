@@ -104,6 +104,38 @@
                                                 (swap! (prim/app-state reconciler) assoc :all-lists []))
                             :networking       (server/new-server-emulator (server/fulcro-parser) 300)}}))
 
+(defsc DemoMutationResponseKeyComponent [this _]
+  {:query         [:demo/id :ui/checked?
+                   ::mutation-response-bad
+                   ::mutation-response-sorta-bad
+                   ::mutation-response-good]
+   :ident         [:demo/id :demo/id]
+   :initial-state {:demo/id 1 :ui/checked? true}}
+  (dom/div
+    (dom/button {:onClick #(pm/ptransact! this `[(do-something-good {})
+                                                 (do-something-bad {::pm/key :Sad-face})
+                                                 (do-something-good {})])} "Combo under ptransact!")
+    (dom/button {:onClick #(pm/pmutate! this `do-something-bad {::pm/key                   :Sad-face
+                                                                ::pm/mutation-response-key ::mutation-response-bad})} "Mutation Crash/Hard network error")
+    (dom/button {:onClick #(pm/pmutate! this `do-something-sorta-bad {::pm/key                   :Bummer
+                                                                      ::pm/mutation-response-key ::mutation-response-sorta-bad})} "API Level Mutation Error")
+    (dom/button {:onClick #(pm/pmutate! this do-something-good-interface {::pm/returning             TodoList
+                                                                          ::pm/key                   :todo-list-key
+                                                                          ::pm/mutation-response-key ::mutation-response-good
+                                                                          ::pm/target                (df/multiple-targets
+                                                                                                       [:main-list]
+                                                                                                       (df/append-to [:all-lists]))})} "Good Mutation")
+    (dom/h1 "See Javascript Console for Behavior Output")))
+
+(ws/defcard demo-mutation-response-key-card
+  {::wsm/card-width 4 ::wsm/card-height 2}
+  (ct.fulcro/fulcro-card
+    {::f.portal/root       DemoMutationResponseKeyComponent
+     ::f.portal/wrap-root? true
+     ::f.portal/app        {:started-callback (fn [{:keys [reconciler]}]
+                                                (swap! (prim/app-state reconciler) assoc :all-lists []))
+                            :networking       (server/new-server-emulator (server/fulcro-parser) 300)}}))
+
 (defmutation broken-pmutation [_]
   (ok-action [env] (+ 1 1)))
 
