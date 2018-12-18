@@ -54,7 +54,7 @@
 (s/def ::timeout pos-int?)
 (s/def ::timer-id (s/with-gen any? #(s/gen #{:timer-1 42})))
 (s/def ::cancel-fn (s/with-gen fn? #(s/gen #{#{:event! :other!}})))
-(s/def ::cancel-on (s/with-gen (fn fn-or-set* [i] (let [f (-> i meta :cancel-on )]
+(s/def ::cancel-on (s/with-gen (fn fn-or-set* [i] (let [f (-> i meta :cancel-on)]
                                                     (or (fn? f) (set? f)))) #(s/gen #{(with-meta {} {:cancel-on (fn [e] true)})})))
 (s/def ::js-timer (s/with-gen #(-> % meta :timer boolean) #(s/gen #{(with-meta {} {:timer {}})})))
 (s/def ::timeout-descriptor (s/keys :req [::js-timer ::timeout ::event-id ::timer-id ::cancel-on] :opt [::event-data]))
@@ -395,13 +395,13 @@
 (defn queue-normal-load!
   "Internal implementation. Queue a load."
   [reconciler query-key component-class load-options]
-  (if (and (nil? query-key) (nil? component-class))         ; regular-style load
-    (log/error "Cannot run load. Either query-key or component-class is required.")
+  (if (nil? query-key)
+    (log/error "Cannot run load. query-key cannot be nil.")
     (defer #(df/load reconciler query-key component-class load-options)))
   nil)
 (>fdef queue-normal-load!
   [reconciler query-key component-class load-options]
-  [::fulcro-reconciler (s/nilable keyword?) (s/nilable ::prim/component-class) ::load-options => nil?])
+  [::fulcro-reconciler ::query-key (s/nilable ::prim/component-class) ::load-options => nil?])
 
 (defn handle-load-error* [reconciler load-request]
   (let [{::keys [asm-id error-event error-data]} (some-> load-request :post-mutation-params)]
@@ -468,9 +468,9 @@
      (update env ::queued-timeouts (fnil conj []) descriptor))))
 (>fdef set-timeout
   ([env timer-id event-id event-data timeout]
-   [::env ::timer-id ::event-id ::event-data pos-int? => ::env])
+    [::env ::timer-id ::event-id ::event-data pos-int? => ::env])
   ([env timer-id event-id event-data timeout cancel-on-events]
-   [::env ::timer-id ::event-id ::event-data pos-int? ::cancel-fn => ::env]))
+    [::env ::timer-id ::event-id ::event-data pos-int? ::cancel-fn => ::env]))
 
 (defn clear-timeout!
   "Clear a scheduled timeout (if it has yet to fire).  Harmless to call if the timeout is gone. This call takes
@@ -734,9 +734,9 @@
                                    ::actor->ident     actors->idents})]))))
 (>fdef begin!
   ([this machine instance-id actors]
-   [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident => any?])
+    [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident => any?])
   ([this machine instance-id actors started-event-data]
-   [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident ::event-data => any?]))
+    [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident ::event-data => any?]))
 
 #?(:clj
    (defmacro defstatemachine [name body]
@@ -873,6 +873,7 @@
 ;; ================================================================================
 
 (s/def ::load-options map?)
+(s/def ::query-key (s/or :key keyword? :ident ::fulcro-ident))
 (s/def ::load (s/keys :opt [::query-key ::prim/component-class ::load-options]))
 (s/def ::queued-loads (s/coll-of ::load))
 (s/def ::post-event ::event-id)
@@ -913,17 +914,17 @@
 
    NOTE: In general a state machine should declare an actor for items in the machine and use `load-actor` instead of
    this function so that the state definitions themselves need not be coupled (via code) to the UI."
-  ([env k component-class]
-   (load env k component-class {}))
-  ([env k component-class options]
+  ([env key-or-ident component-class]
+   (load env key-or-ident component-class {}))
+  ([env key-or-ident component-class options]
    (let [options (convert-load-options env options)]
      (update env ::queued-loads (fnil conj []) (cond-> {}
                                                  component-class (assoc ::prim/component-class component-class)
-                                                 k (assoc ::query-key k)
+                                                 key-or-ident (assoc ::query-key key-or-ident)
                                                  options (assoc ::load-options options))))))
 (>fdef load
-  ([env k component-class] [::env keyword? ::prim/component-class => ::env])
-  ([env k component-class options] [::env keyword? ::prim/component-class ::load-options => ::env]))
+  ([env k component-class] [::env ::query-key ::prim/component-class => ::env])
+  ([env k component-class options] [::env ::query-key ::prim/component-class ::load-options => ::env]))
 
 (defn load-actor
   "Load (refresh) the given actor. If the actor *is not* on the UI, then you *must* specify
