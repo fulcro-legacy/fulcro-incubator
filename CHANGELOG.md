@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.24
+------
+- Fixed a spec
+
 0.0.23
 ------
 - Support `::pm/mutation-return-key` on pessimistic mutations
