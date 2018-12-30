@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="generator" content="Asciidoctor 1.5.6.2">
+<meta name="generator" content="Asciidoctor 1.5.6.1">
 <meta name="author" content="Tony Kay">
 <link rel="shortcut icon" type="image/x-icon" href="assets/favicon.ico">
 <title>Routing Features</title>
@@ -532,8 +532,7 @@ table.CodeRay td.code>pre{padding:0}
 <li><a href="#_routers">1. Routers</a></li>
 <li><a href="#_routing_targets">2. Routing Targets</a></li>
 <li><a href="#_initial_route">3. Initial Route</a></li>
-<li><a href="#_todo_macro_for_route_targets">4. TODO: Macro for Route Targets</a></li>
-<li><a href="#_full_example">5. Full Example</a></li>
+<li><a href="#_full_example">4. Full Example</a></li>
 </ul>
 </div>
 </div>
@@ -997,39 +996,7 @@ the new route.
 </div>
 </div>
 <div class="sect2">
-<h3 id="_todo_macro_for_route_targets"><a class="anchor" href="#_todo_macro_for_route_targets"></a><a class="link" href="#_todo_macro_for_route_targets">4. TODO: Macro for Route Targets</a></h3>
-<div class="paragraph">
-<p>I&#8217;m thinking that the macro for this would be something like:</p>
-</div>
-<div class="listingblock">
-<div class="content">
-<pre class="CodeRay highlight"><code data-lang="clojure">(defsc-router-target Pane2 [this props]
-  {<span class="keyword">..</span><span class="keyword">.</span> normal defsc stuff.<span class="keyword">..</span>
-   <span class="symbol">:route-segment</span> [<span class="string"><span class="delimiter">&quot;</span><span class="content">pane2</span><span class="delimiter">&quot;</span></span>]
-   <span class="symbol">:will-enter</span> (<span class="keyword">fn</span> [c reconciler route-params] <span class="keyword">..</span><span class="keyword">.</span>)
-   <span class="symbol">:will-leave</span> (<span class="keyword">fn</span> [this props] <span class="predefined-constant">true</span>)
-  }
-  <span class="keyword">..</span><span class="keyword">.</span>normal body.<span class="keyword">..</span>)</code></pre>
-</div>
-</div>
-<div class="paragraph">
-<p>with only <code>:route-segment</code> required.</p>
-</div>
-<div class="dlist">
-<dl>
-<dt class="hdlist1"><code>:will-leave</code></dt>
-<dd>
-<p>defaults to returning <code>true</code>.</p>
-</dd>
-<dt class="hdlist1"><code>:will-enter</code></dt>
-<dd>
-<p>Must return an immediate or deferred route instruction. The default is an immediate route based on the component&#8217;s <code>(ident component-class {})</code>, which is only sane if the component has a singleton database instance (constant ident).</p>
-</dd>
-</dl>
-</div>
-</div>
-<div class="sect2">
-<h3 id="_full_example"><a class="anchor" href="#_full_example"></a><a class="link" href="#_full_example">5. Full Example</a></h3>
+<h3 id="_full_example"><a class="anchor" href="#_full_example"></a><a class="link" href="#_full_example">4. Full Example</a></h3>
 <div class="paragraph">
 <p>The workspaces source contains a full working example of this routing system in
 <a href="https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/workspaces/fulcro/incubator/routing_ws.cljs" class="bare">https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/workspaces/fulcro/incubator/routing_ws.cljs</a></p>
@@ -1039,7 +1006,7 @@ the new route.
 <div id="footer">
 <div id="footer-text">
 Version 2<br>
-Last updated 2018-12-09 18:38:30 PST
+Last updated 2018-12-29 16:44:08 PST
 </div>
 </div>
 </body>
