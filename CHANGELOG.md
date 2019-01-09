@@ -1,9 +1,5 @@
 # Change Log
 
-0.0.25
-------
-- Fixed issue when reconciler doesn't exist
-
 0.0.24
 ------
 - Fixed a spec
