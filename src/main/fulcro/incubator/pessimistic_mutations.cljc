@@ -80,8 +80,8 @@
   {::pm/mutation-response-key ::custom-mutation-response-key}"
   ([this-or-props {::keys [mutation-response-key] :as options}]
    (if (fp/component? this-or-props)
-     (mutation-response-with-key (-> this-or-props fp/get-reconciler fp/app-state deref) (fp/props this-or-props) options)
-     (-> this-or-props mutation-response-key)))
+     (mutation-response-with-key (some-> this-or-props fp/get-reconciler fp/app-state deref) (fp/props this-or-props) options)
+     (get this-or-props mutation-response-key)))
   ([state props {::keys [mutation-response-key]}]
    (let [response (-> props mutation-response-key)]
      (if (fulcro.util/ident? response) (get-in state response) response))))
