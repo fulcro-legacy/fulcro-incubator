@@ -138,7 +138,9 @@
     (when (= (count matching-segment) (count route-segment))
       matching-segment)))
 
-(defn- current-route-class [this]
+(defn current-route-class
+  "Get the class of the component that is currently being routed to."
+  [this]
   (let [state-map (prim/component->state-map this)
         class     (some->> (prim/get-query this state-map) prim/query->ast :children
                     (filter #(= ::current-route (:key %))) first :component)]
