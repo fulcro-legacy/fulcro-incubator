@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.26
+------
+- Fix for SSR of dynamic router
+
 0.0.25
 ------
 - Fixed issue when reconciler doesn't exist
