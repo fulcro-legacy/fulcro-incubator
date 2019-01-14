@@ -336,14 +336,25 @@
 (>fdef apply-event-value [env {::keys [event-id event-data]}]
   [::env (s/keys :opt [::event-id ::event-data]) => ::env])
 
-(defn state-machine-env [state-map ref asm-id event-id event-data]
-  (cond-> {::state-map state-map
-           ::asm-id    asm-id}
-    event-id (assoc ::event-id event-id)
-    (seq event-data) (assoc ::event-data event-data)
-    ref (assoc ::source-actor-ident ref)))
-(>fdef state-machine-env [state-map ref asm-id event-id event-data]
-  [::state-map (s/nilable ::fulcro-ident) ::asm-id (s/nilable ::event-id) (s/nilable ::event-data) => ::env])
+(defn state-machine-env
+  "Create an env for use with other functions. Used internally, but may be used as a helper ."
+  ([state-map asm-id]
+   (cond-> {::state-map state-map
+            ::asm-id    asm-id}
+     event-id (assoc ::event-id event-id)
+     (seq event-data) (assoc ::event-data event-data)
+     ref (assoc ::source-actor-ident ref)))
+  ([state-map ref asm-id event-id event-data]
+   (cond-> {::state-map state-map
+            ::asm-id    asm-id}
+     event-id (assoc ::event-id event-id)
+     (seq event-data) (assoc ::event-data event-data)
+     ref (assoc ::source-actor-ident ref))))
+(>fdef state-machine-env
+  ([state-map asm-id]
+    [::state-map ::asm-id => ::env])
+  ([state-map ref asm-id event-id event-data]
+    [::state-map (s/nilable ::fulcro-ident) ::asm-id (s/nilable ::event-id) (s/nilable ::event-data) => ::env]))
 
 (defn with-actor-class
   "Associate a given component UI Fulcro class with an ident.  This is used with `begin!` in your actor map if the
