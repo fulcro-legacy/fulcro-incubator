@@ -27,6 +27,7 @@
   {::uism/actor-names #{:dialog}
    ::uism/aliases     {:visible? [:dialog :ui/active?]
                        :title    [:dialog :title]
+                       :widgets  [:dialog :linked-widgets]
                        :username [:dialog :name]}
    ::uism/plugins     {:f? (fn [{:keys [visible? username]}]
                              (when visible? username))}
@@ -42,11 +43,20 @@
                                                         ::uism/target-state :B}}}
                        :A       {::uism/handler A-handler}}})
 
-(def base-fulcro-state {:TABLE        {1 {:ui/active? false :name "Joe"}}
-                        ::uism/asm-id {:fake (uism/new-asm {::uism/state-machine-id `test-machine
-                                                            ::uism/asm-id           :fake
-                                                            ::uism/actor->ident     {:dialog [:TABLE 1]}})}})
-(defn test-env [event-id event-data] (uism/state-machine-env base-fulcro-state [:TABLE 1] :fake event-id event-data))
+(def base-fulcro-state
+  {:TABLE        {1 {:ui/active?     false :name "Joe"
+                     :linked-widgets [[:widget/by-id 1]]}
+                  2 {:ui/active?     true :name "Jane"
+                     :linked-widgets [[:widget/by-id 2]]}}
+   :widget/by-id {1 {:id 1}
+                  2 {:id 2}
+                  3 {:id 3}}
+   ::uism/asm-id {:fake (uism/new-asm
+                          {::uism/state-machine-id `test-machine
+                           ::uism/asm-id           :fake
+                           ::uism/actor->ident     {:dialog (uism/with-actor-class [:TABLE 1] AClass)}})}})
+(defn test-env [event-id event-data]
+  (uism/state-machine-env base-fulcro-state [:TABLE 1] :fake event-id event-data))
 
 (specification "State Machine Registry"
   (assertions
@@ -154,12 +164,133 @@
         (get 1)
         :name) => "Sam"))
 
+  (specification "reset-actor-ident"
+    (let [env               (uism/reset-actor-ident env :dialog [:TABLE 2])
+          actor->ident-path (uism/asm-path env ::actor->ident)
+          ident->actor-path (uism/asm-path env ::ident->actor)]
+      (assertions
+        "Can update actor/ident indexes"
+        (uism/asm-value env ::uism/actor->ident) => {:dialog [:TABLE 2]}
+        (uism/asm-value env ::uism/ident->actor) => {[:TABLE 2] :dialog}
+        "New indexes have class metadata"
+        (-> (uism/asm-value env ::uism/actor->ident)
+          :dialog meta) => {::uism/class AClass}
+        (-> (uism/asm-value env ::uism/ident->actor)
+          keys first meta) => {::uism/class AClass}))
+
+    (assertions
+      "Returns unmodified env if the alias isn't valid"
+      (uism/set-aliased-value env :name "Sam") => env
+      "Sets the value in the fulro state that the alias refers to"
+      (-> env
+        (uism/assoc-aliased :username "Sam")
+        ::uism/state-map
+        :TABLE
+        (get 1)
+        :name) => "Sam"))
+
+  (specification "assoc-aliased"
+    (assertions
+      "Can set a single value"
+      (-> env
+        (uism/assoc-aliased :title "Hello")
+        (uism/alias-value :title)) => "Hello"
+      "Can set two values"
+      (-> env
+        (uism/assoc-aliased :title "Hello" :username "Joe")
+        (uism/alias-value :title)) => "Hello"
+      (-> env
+        (uism/assoc-aliased :title "Hello" :username "Joe")
+        (uism/alias-value :username)) => "Joe"
+      "Can set more than 2 values"
+      (-> env
+        (uism/assoc-aliased :title "Hello" :username "Joe" :visible? :booga)
+        (uism/alias-value :visible?)) => :booga)
+
+    (assertions
+      "Returns unmodified env if the alias isn't valid"
+      (uism/set-aliased-value env :name "Sam") => env
+      "Sets the value in the fulro state that the alias refers to"
+      (-> env
+        (uism/assoc-aliased :username "Sam")
+        ::uism/state-map
+        :TABLE
+        (get 1)
+        :name) => "Sam"))
+
+  (specification "update-aliased"
+    (assertions
+      "Can update a value"
+      (-> env
+        (uism/assoc-aliased :title "Hello")
+        (uism/update-aliased :title #(str % "-suffix"))
+        (uism/alias-value :title)) => "Hello-suffix"
+      "Can update a value with arguments"
+      (-> env
+        (uism/assoc-aliased :title "Hello")
+        (uism/update-aliased :title #(str %1 %2 %3) 1 2)
+        (uism/alias-value :title)) => "Hello12"))
+
+  (specification "dissoc-aliased"
+    (let [env (uism/assoc-aliased env :title "Hello" :username "Joe")]
+      (let [entries (-> env
+                      (uism/dissoc-aliased :title)
+                      (get-in [::uism/state-map :TABLE 1])
+                      (-> keys set))]
+        (assertions
+          "Can dissoc a single alias"
+          (contains? entries :title) => false))
+      (let [entries (-> env
+                      (uism/dissoc-aliased :title :username)
+                      (get-in [::uism/state-map :TABLE 1])
+                      (-> keys set))]
+        (assertions
+          "Can dissoc multiple aliases"
+          (contains? entries :title) => false
+          (contains? entries :name) => false))))
+
+  (specification "integrate-ident"
+    (assertions
+      "Can prepend an ident"
+      (-> env
+        (uism/integrate-ident [:widget/by-id 2] :prepend :widgets)
+        (get-in [::uism/state-map :TABLE 1 :linked-widgets])
+        ) => [[:widget/by-id 2] [:widget/by-id 1]]
+      "Can append an ident"
+      (-> env
+        (uism/integrate-ident [:widget/by-id 3] :append :widgets)
+        (get-in [::uism/state-map :TABLE 1 :linked-widgets])
+        ) => [[:widget/by-id 1] [:widget/by-id 3]]
+      "Integrating an already present ident has no effect"
+      (-> env
+        (uism/integrate-ident [:widget/by-id 1] :prepend :widgets)
+        (get-in [::uism/state-map :TABLE 1 :linked-widgets])
+        ) => [[:widget/by-id 1]]
+      (-> env
+        (uism/integrate-ident [:widget/by-id 1] :append :widgets)
+        (get-in [::uism/state-map :TABLE 1 :linked-widgets])
+        ) => [[:widget/by-id 1]]))
+
+  (specification "remove-ident"
+    (assertions
+      "Can remove an ident"
+      (-> env
+        (uism/remove-ident [:widget/by-id 1] :widgets)
+        (get-in [::uism/state-map :TABLE 1 :linked-widgets])
+        ) => []
+      "Removing a non-present ident has no effect"
+      (-> env
+        (uism/remove-ident [:widget/by-id 2] :widgets)
+        (get-in [::uism/state-map :TABLE 1 :linked-widgets])
+        ) => [[:widget/by-id 1]]))
+
   (specification "aliased-data"
     (assertions
       "Builds a map of all of the current values of aliased data"
       (-> env
         (uism/aliased-data)) => {:visible? false
                                  :title    nil
+                                 :widgets  [[:widget/by-id 1]]
                                  :username "Joe"}))
 
   (specification "run"
@@ -514,7 +645,7 @@
 
          (uism/set-string! {} :fake :username #js {:target #js {:value "hi"}}))))
 
-  (specification "derive-actor-idents" :focused
+  (specification "derive-actor-idents"
     (let [actual (uism/derive-actor-idents {:a [:x 1]
                                             :b AClass
                                             :c (th/mock-component AClass {})

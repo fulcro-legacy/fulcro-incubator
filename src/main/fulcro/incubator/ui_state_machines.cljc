@@ -373,6 +373,125 @@
 (>fdef actor-class [env actor-name]
   [::env ::actor-name => (s/nilable ::prim/component-class)])
 
+(defn reset-actor-ident
+  "Safely changes the ident of an actor.
+
+  Makes sure ident is consistently reset and includes necessary class metadata."
+  [env actor ident]
+  (let [class             (actor-class env actor)
+        ident             (with-actor-class ident class)
+        actor->ident      (-> env
+                            (asm-value ::actor->ident)
+                            (assoc actor ident))
+        ident->actor      (clojure.set/map-invert actor->ident)
+
+        actor->ident-path (asm-path env ::actor->ident)
+        ident->actor-path (asm-path env ::ident->actor)]
+    (-> env
+      (assoc-in actor->ident-path actor->ident)
+      (assoc-in ident->actor-path ident->actor))))
+(>fdef reset-actor-ident [env actor ident]
+  [::env ::alias ::fulcro-ident => ::env])
+
+(defn assoc-aliased
+  "Similar to clojure.core/assoc but works on UISM env and aliases."
+  ([env alias new-value alias-2 value-2 & kv-pairs]
+   (apply set-aliased-value env alias new-value
+     alias-2 value-2 kv-pairs))
+  ([env alias new-value]
+   (set-aliased-value env alias new-value)))
+(>fdef assoc-aliased
+  ([env alias new-value alias-2 value-2 & kv-pairs]
+   [::env ::alias any? ::alias any? (s/* any?) => ::env])
+  ([env alias new-value]
+   [::env ::alias any? => ::env]))
+
+(defn update-aliased
+  "Similar to clojure.core/update but works on UISM env and aliases."
+  ([env k f]
+   (assoc-aliased env k (f (alias-value env k))))
+  ([env k f x]
+   (assoc-aliased env k (f (alias-value env k) x)))
+  ([env k f x y]
+   (assoc-aliased env k (f (alias-value env k) x y)))
+  ([env k f x y z]
+   (assoc-aliased env k (f (alias-value env k) x y z)))
+  ([env k f x y z & more]
+   (assoc-aliased env k (apply f (alias-value env k) x y z more))))
+(>fdef update-aliased
+  ([env k f]
+   [::env ::alias any? => ::env])
+  ([env k f x]
+   [::env ::alias any? any? => ::env])
+  ([env k f x y]
+   [::env ::alias any? any? any? => ::env])
+  ([env k f x y z]
+   [::env ::alias any? any? any? any? => ::env])
+  ([env k f x y z & more]
+   [::env ::alias any? any? any? any? (s/* any?) => ::env]))
+
+(declare apply-action)
+
+(defn dissoc-aliased
+  "Similar to clojure.core/dissoc but works on UISM env and aliases."
+  ([env] env)
+  ([env alias]
+   (when-not (nil? env)
+     (let [path     (resolve-alias env alias)
+           sub-path (butlast path)
+           k        (last path)]
+       (apply-action env #(update-in % sub-path dissoc k)))))
+  ([env k & ks]
+   (when-not (nil? env)
+     (let [ret (dissoc-aliased env k)]
+       (if ks
+         (recur ret (first ks) (next ks))
+         ret)))))
+(>fdef dissoc-aliased
+  ([env] [::env => ::env])
+  ([env alias] [::env ::alias => ::env])
+  ([env k & ks] [::env ::alias (s/* ::alias) => ::env]))
+
+(defn integrate-ident
+  "Integrate an ident into any number of aliases in the state machine.
+  Aliases must point to a list of idents.
+
+  The named parameters can be specified any number of times. They are:
+
+  - append:  A keyword (alias) to a list in your app state where this new object's ident should be appended. Will not append
+  the ident if that ident is already in the list.
+  - prepend: A keyword (alias) to a list in your app state where this new object's ident should be prepended. Will not append
+  the ident if that ident is already in the list."
+  [env ident & named-parameters]
+  (let [actions (partition 2 named-parameters)]
+    (reduce (fn [env [command alias-to-idents]]
+              (let [alias-value                 (alias-value env alias-to-idents)
+                    already-has-ident-at-alias? (some #(= % ident) alias-value)]
+                (case command
+                  :prepend (if already-has-ident-at-alias?
+                             env
+                             (update-aliased env alias-to-idents #(into [ident] %)))
+                  :append (if already-has-ident-at-alias?
+                            env
+                            (update-aliased env alias-to-idents (fnil conj []) ident))
+                  (throw (ex-info "Unknown operation for integrate-ident: " {:command command :arg alias-to-idents})))))
+      env actions)))
+(>fdef integrate-ident
+  [env ident & named-parameters]
+  [::env ::fulcro-ident
+   (s/* (s/or :name #{:prepend :append} :param ::fulcro-ident))
+   => ::env])
+
+(defn remove-ident
+  "Removes an ident, if it exists, from an alias that points to a list of idents."
+  [env ident alias-to-idents]
+  (let [new-list (fn [old-list]
+                   (vec (filter #(not= ident %) old-list)))]
+    (update-aliased env alias-to-idents new-list)))
+(>fdef remove-ident
+  [env ident alias-to-idents]
+  [::env ::fulcro-ident ::alias => ::env])
+
 (defn queue-mutations!
   [reconciler env]
   (let [queued-mutations (::queued-mutations env)]
