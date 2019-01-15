@@ -339,11 +339,7 @@
 (defn state-machine-env
   "Create an env for use with other functions. Used internally, but may be used as a helper ."
   ([state-map asm-id]
-   (cond-> {::state-map state-map
-            ::asm-id    asm-id}
-     event-id (assoc ::event-id event-id)
-     (seq event-data) (assoc ::event-data event-data)
-     ref (assoc ::source-actor-ident ref)))
+   (state-machine-env state-map nil asm-id nil nil))
   ([state-map ref asm-id event-id event-data]
    (cond-> {::state-map state-map
             ::asm-id    asm-id}
