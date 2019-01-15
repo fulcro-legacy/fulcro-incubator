@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.27
+------
+- Extended UISM functions.
+- UISM now has minimal to-many support via ident helpers.
+
 0.0.26
 ------
 - Fix for SSR of dynamic router

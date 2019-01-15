@@ -217,14 +217,22 @@ together to end up with a final result to return from the handler:
 ```
 (fn [env]
   (-> env
-     (uism/set-aliased-value :visible? true)
+     (uism/assoc-aliased :visible? true)
      ...))
 ```
 
 The library includes functions for dealing with Fulcro state via the aliases we've defined:
 
-`(uism/set-aliased-value env alias new-value & more-kv-pairs)`:: Sets Fulcro state associated with the given alias
+`(uism/assoc-aliased env alias new-value & more-kv-pairs)`:: Sets Fulcro state associated with the given alias
 to the given new value. Can accept multiple k-v pairs (like `assoc`).
+`(uism/dissoc-aliased env alias & more-aliases)`:: Removes given aliases from Fulcro state. Can accept multiple
+ aliases (like `dissoc`).
+`(uism/update-aliased env alias f & args)`:: Updates given aliases in Fulcro state with function f
+and given arguments. (like `update`).
+`(uism/integrate-ident env ident & named-parameter)`:: Integrates idents (append or prepend) to aliases in Fulcro state
+that refer to a list of idents. (like `fulcro.client.mutations/integrate-ident*`).
+`(uism/remove-ident env ident alias)`:: Removes ident from aliases that refer to a list of idents, in
+ Fulcro state. (like `fulcro.client.mutations/remove-ident*`).
 `(uism/alias-value env alias)`:: Gets the current Fulcro state value associated with the alias.
 `(uism/run env plugin-name)`:: Runs the given plugin (passing it all of the aliased data from
 current Fulcro state) and returns the value from the plugin.
@@ -298,6 +306,26 @@ need to tell the state machine system what Fulcro component class is used for no
 
 Failing to do so may cause your state machine to misbehave (the state machine actually tries to derive the class from
 Fulcro's indexes, but that will only work if the component is on-screen).
+
+=== Dynamic Actor Idents
+
+If you do not know the ident of an actor when the machine begins, or if the ident of an actor can
+change over time, then use `reset-actor-ident`.
+
+Say you start the machine like this, with a `:none` marker.
+
+```
+(uism/begin! this person-editing-machine ::personsm {:selected-person (uism/with-actor-class [:person/by-id :none] Person)
+                                                     :list            [:person-list :singleton})
+```
+
+Then for example in an event you can update the actor's ident like so
+```
+:person-selected-event
+{::uism/handler (fn [{{:keys [new-ident]} ::uism/event-data :as env}]
+                  (uism/reset-actor-ident env :selected-person new-ident))}
+```
+
 
 === Triggering Events
 
