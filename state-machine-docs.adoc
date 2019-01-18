@@ -245,8 +245,15 @@ bit of data while your state machine is running.
 
 There are numerous other helpers, including:
 
-`(apply-action env (fn [state-map] state-map))`:: use a fn of state-map to apply some mutation helper via a SM env. The return value of the function will become the new state in the env and will be applied when the handler returns.
-`(get-active-state this asm-id)`:: Read the “current state name” from an active state machine while in a UI component (e.g. via `this`).
+`(uism/apply-action env (fn [state-map] state-map))`:: use a fn of state-map to apply some mutation helper via a SM env. The return value of the function will become the new state in the env and will be applied when the handler returns.
+`(uism/get-active-state this asm-id)`:: Read the “current state name” from an active state machine while in a UI component (e.g. via `this`).
+`(uism/asm-value env ks)`:: Get the value of an ASM based on keyword OR key-path `ks`.
+`(uism/actor->ident env actor-name)`:: Get the ident of an actor
+`(uism/actor-path env actor-name)`:: Get the real Fulcro state-path for the entity of the given actor.
+`(uism/actor-path env actor-name k)`:: Get the real Fulcro state-path for the attribute k of the entity of the given actor.
+`(uism/set-actor-value env actor-name k v)`:: Set a value in the actor's Fulcro entity. Only the actor is resolved. The k is not processed as an alias. 
+`(uism/actor-value env actor-name k follow-idents?)`:: Get the value of a particular key in the given actor's entity. If follow-idents? is true (which is the default),
+then it will recursively follow idents until it finds a non-ident value.
 
 == Using State Machines from the UI
 
