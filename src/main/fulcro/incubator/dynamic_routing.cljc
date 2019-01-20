@@ -6,7 +6,6 @@
     [fulcro.incubator.ui-state-machines :as uism :refer [defstatemachine]]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
-    [taoensso.timbre :as log]
     [clojure.spec.alpha :as s]
     #?(:clj [cljs.analyzer :as ana])
     [fulcro.util :as futil]))
@@ -383,8 +382,7 @@
                     event-data)
                   (uism/trigger! reconciler router-id :route! event-data))
                 (when (seq remaining-path)
-                  (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))))
-     (log/info "Routing request rejected by on-screen router target."))))
+                  (recur (ast-node-for-route target-ast remaining-path) remaining-path))))))))))
 
 (defn change-route
   "Trigger a route change.
