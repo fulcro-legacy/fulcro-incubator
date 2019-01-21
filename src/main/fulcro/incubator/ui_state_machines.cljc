@@ -479,7 +479,7 @@
 (>fdef integrate-ident
   [env ident & named-parameters]
   [::env ::fulcro-ident
-   (s/* (s/or :name #{:prepend :append} :param ::fulcro-ident))
+   (s/* (s/cat :name #{:prepend :append} :param keyword?))
    => ::env])
 
 (defn remove-ident

@@ -102,7 +102,8 @@
                  (let [id 1]
                    (df/load reconciler [:user/id id] User {:post-mutation        `target-ready
                                                            :post-mutation-params {:target [:user/id id]}})
-                   (dr/route-deferred [:user/id id])))
+                   (dr/route-deferred [:user/id id]
+                     (fn []))))
                static dr/RouteLifecycle
                (will-leave [this props] true)]})
 

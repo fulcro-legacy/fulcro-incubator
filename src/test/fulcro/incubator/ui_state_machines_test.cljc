@@ -25,10 +25,11 @@
 (defn A-handler [env] env)
 (uism/defstatemachine test-machine
   {::uism/actor-names #{:dialog}
-   ::uism/aliases     {:visible? [:dialog :ui/active?]
-                       :title    [:dialog :title]
-                       :widgets  [:dialog :linked-widgets]
-                       :username [:dialog :name]}
+   ::uism/aliases     {:visible?    [:dialog :ui/active?]
+                       :title       [:dialog :title]
+                       :widgets     [:dialog :linked-widgets]
+                       :uberwidgets [:dialog :other-widgets]
+                       :username    [:dialog :name]}
    ::uism/plugins     {:f? (fn [{:keys [visible? username]}]
                              (when visible? username))}
    ::uism/states      {:initial {::uism/handler (fn [env]
@@ -45,8 +46,10 @@
 
 (def base-fulcro-state
   {:TABLE        {1 {:ui/active?     false :name "Joe"
+                     :other-widgets  []
                      :linked-widgets [[:widget/by-id 1]]}
                   2 {:ui/active?     true :name "Jane"
+                     :other-widgets  []
                      :linked-widgets [[:widget/by-id 2]]}}
    :widget/by-id {1 {:id 1}
                   2 {:id 2}
@@ -251,6 +254,12 @@
 
   (specification "integrate-ident"
     (assertions
+      "Accepts a list of operations"
+      (let [nenv (uism/integrate-ident env [:widget/by-id 2] :prepend :widgets
+                   :append :uberwidgets)]
+        (select-keys (get-in nenv [::uism/state-map :TABLE 1]) #{:other-widgets :linked-widgets}))
+      => {:linked-widgets [[:widget/by-id 2] [:widget/by-id 1]]
+          :other-widgets [[:widget/by-id 2]]}
       "Can prepend an ident"
       (-> env
         (uism/integrate-ident [:widget/by-id 2] :prepend :widgets)
@@ -288,10 +297,11 @@
     (assertions
       "Builds a map of all of the current values of aliased data"
       (-> env
-        (uism/aliased-data)) => {:visible? false
-                                 :title    nil
-                                 :widgets  [[:widget/by-id 1]]
-                                 :username "Joe"}))
+        (uism/aliased-data)) => {:visible?    false
+                                 :title       nil
+                                 :widgets     [[:widget/by-id 1]]
+                                 :uberwidgets []
+                                 :username    "Joe"}))
 
   (specification "run"
     (assertions

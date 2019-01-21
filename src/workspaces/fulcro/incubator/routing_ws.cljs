@@ -13,7 +13,6 @@
     [nubank.workspaces.card-types.fulcro :as ct.fulcro]
     [nubank.workspaces.lib.fulcro-portal :as f.portal]
     [fulcro.client.mutations :as m]
-    [taoensso.timbre :as log]
     [fulcro.client.data-fetch :as df]
     [fulcro.incubator.dynamic-routing :as dr]
     [fulcro.client :as fc]))
