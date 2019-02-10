@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.28
+------
+- UISM: Added support for alias/actor targeting to load 
+- UISM: Added support for using actor name instead of class in load
+
 0.0.27
 ------
 - Extended UISM functions.
