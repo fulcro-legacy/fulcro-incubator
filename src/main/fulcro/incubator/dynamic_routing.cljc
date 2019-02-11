@@ -4,6 +4,7 @@
     [ghostwheel.core :refer [>fdef => ?]]
     #?(:clj [fulcro.incubator.defsc-extensions :as dext])
     [fulcro.incubator.ui-state-machines :as uism :refer [defstatemachine]]
+    [fulcro.server-render :as ssr]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
     [clojure.spec.alpha :as s]
@@ -507,3 +508,37 @@
 
 #?(:clj
    (dext/defextended-defsc defsc-route-target [[`RouteLifecycle false] [`RouteTarget true]]))
+
+(defn ssr-initial-state
+  "A helper to get initial state database for SSR.
+
+  Returns:
+
+  ```
+  {:db normalized-db
+   :props props-to-render}
+  ```
+
+  IMPORTANT NOTE: will-enter for the routes will *not* get a reconciler (since there
+  isn't one).  Be sure your routers will tolerate a nil reconciler.
+   "
+  [app-root-class root-router-class route-path]
+  (let [initial-tree (prim/get-initial-state app-root-class {})
+        initial-db   (ssr/build-initial-state initial-tree app-root-class)
+        router-ident (prim/get-ident root-router-class {})
+        instance-id  (second router-ident)
+        {:keys [target matching-prefix]} (route-target root-router-class route-path)
+        target-ident (will-enter+ target nil nil)           ; Target in this example needs neither
+        params       {::uism/asm-id           instance-id
+                      ::uism/state-machine-id (::state-machine-id RouterStateMachine)
+                      ::uism/event-data       (merge
+                                                {:path-segment matching-prefix
+                                                 :router       (vary-meta router-ident assoc
+                                                                 :component root-router-class)
+                                                 :target       (vary-meta target-ident assoc
+                                                                 :component target)})
+                      ::uism/actor->ident     {:router (uism/with-actor-class router-ident root-router-class)}}
+        initial-db   (assoc-in initial-db [::uism/asm-id :RootRouter] (uism/new-asm params))]
+    {:db    initial-db
+     :props (prim/db->tree (prim/get-query app-root-class initial-db)
+              initial-db initial-db)}))
