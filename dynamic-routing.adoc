@@ -150,7 +150,14 @@ NOTE: There is a complete working demo in https://github.com/fulcrologic/fulcro-
 
 == Initial Route
 
-The compostion of routers in your UI will result in some overall route that is the "default" at application start.  This is simply the first element of each `defrouter` that is reachable from your root.
+The dynamic routing relies on a call to `change-route` in order to start the routing system.  Therefore you MUST make
+a call to `change-route` on start in order for the dynamic routers to work; however, there is also the concern of what
+gets rendered on the "first frame" of application mount.  Thus, you want there to technically be a "default route"
+in app state as well.
+
+The composition of routers in your UI will result in some overall route that is the "default" at application start
+(as far as initial application state is concerned).
+This is simply the first element of each `defrouter` that is reachable from your root.
 
 The "default" target on a route that is visible at application load MUST have initial state that gives the router something in state to "route to", otherwise you won't be able to see it.
 
