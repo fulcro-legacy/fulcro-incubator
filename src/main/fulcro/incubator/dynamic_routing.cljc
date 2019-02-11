@@ -510,7 +510,7 @@
    (dext/defextended-defsc defsc-route-target [[`RouteLifecycle false] [`RouteTarget true]]))
 
 (defn ssr-initial-state
-  "A helper to get initial state database for SSR.
+  "(ALPHA) A helper to get initial state database for SSR.
 
   Returns:
 
@@ -519,9 +519,13 @@
    :props props-to-render}
   ```
 
-  IMPORTANT NOTE: will-enter for the routes will *not* get a reconciler (since there
+  IMPORTANT NOTES:
+
+  - `will-enter` for the routes will *not* get a reconciler (since there
   isn't one).  Be sure your routers will tolerate a nil reconciler.
-   "
+  - This has not been well-tested.  It is known to render correct HTML in simple cases, but the initial state
+  may not actually be correct for the starting app with respect to the routers.
+  "
   [app-root-class root-router-class route-path]
   (let [initial-tree (prim/get-initial-state app-root-class {})
         initial-db   (ssr/build-initial-state initial-tree app-root-class)
