@@ -3,7 +3,7 @@
   :url "https://github.com/fulcrologic/fulcro-incubator"
   :license {:name "MIT" :url "https://opensource.org/licenses/MIT"}
 
-  :plugins [[lein-tools-deps "0.4.1"]]
+  :plugins [[lein-tools-deps "0.4.3"]]
   :middleware [lein-tools-deps.plugin/resolve-dependencies-with-deps-edn]
   :lein-tools-deps/config {:config-files [:install :user :project]}
 
