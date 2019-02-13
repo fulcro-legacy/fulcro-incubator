@@ -66,7 +66,7 @@ support viewer, etc.)
 . The state machine declarations are reusable, and make it easy to "derive" new
 definitions based on existing ones.
 
-== Aliases
+= Aliases
 
 The first powerful concept for our state machines is aliasing.  The first kind of aliasing is
 for the "actors" that will participate in our UI.  An actor is simply a keyword defined in the
@@ -99,7 +99,7 @@ The next layer of aliasing is for the data our state machine will manipulate:
    ...})
 ```
 
-== Derived State Machines  [[DerivedSM]]
+= Derived State Machines  [[DerivedSM]]
 
 These aliases are based, as you can see, on the actor names.  `:visible?`, for example,
 is an alias for the `:dialog` actor's `:ui/active?` property.  This mapping can be easily overriden
@@ -113,7 +113,7 @@ in a "derived" state machine by simple data manipulation:
 This makes it possible to easily build a library of state machines that work on your app state
 in a very general and configurable way without having to change any actual logic!
 
-== Plugins
+= Plugins
 
 In order for a state machine to be as reusable as possible we'd also like to be able to write
 logic that the state machine uses in a form that can be easily changed.  We call these bits of
@@ -135,7 +135,7 @@ The state machine can come with a simple plugin like this:
 that just checks that the fields are non-empty, and someone could easily provide an alternative
 implementation with the trick shown for overriding an alias in <<DerivedSM, Derived State Machines>>.
 
-== States
+= States
 
 The final bit of a state machine definition is, of course, the actual *states*.  In our
 system we define these as a map from user-defined state name to a function that will
@@ -156,7 +156,7 @@ The overall configuration of states looks like this:
 
 and you have two options for what you put in a state's definition.
 
-=== Option 1 -- Predicate/transition/handler (preferred)
+== Option 1 -- Predicate/transition/handler (preferred)
 
 With this option you specify a map of events to a description of what should happen:
 
@@ -192,7 +192,7 @@ certain circumstances you'd like to avoid that.  If predicate is `false`, then t
 above) are *not* applied.
 
 
-=== Option 2 -- A Single Handler
+== Option 2 -- A Single Handler
 
 This format of defining the states allows you to write just one function, but is not normally recommended, as it
 does not give you the ability to analyze the states/events as a diagram via simple data analysis.  It does, however,
@@ -207,7 +207,7 @@ not define an event map, and instead embed a handler in it's place:
                        ...)}}
 ```
 
-== Writing Handlers and Data Manipulation
+= Writing Handlers and Data Manipulation
 
 From here it's pretty easy.  The handlers are functions that receive a state machine (SM) environment and
 must return a SM environment (or nil, which is considered "no change"). Since the
@@ -255,12 +255,12 @@ There are numerous other helpers, including:
 `(uism/actor-value env actor-name k follow-idents?)`:: Get the value of a particular key in the given actor's entity. If follow-idents? is true (which is the default),
 then it will recursively follow idents until it finds a non-ident value.
 
-== Using State Machines from the UI
+= Using State Machines from the UI
 
 The next step, of course, is hooking this state machine up so it can control your UI (which really
 just means your app state).
 
-=== Starting An Instance
+== Starting An Instance
 
 The first thing you need to do is create an instance and start it:
 
@@ -268,7 +268,7 @@ The first thing you need to do is create an instance and start it:
 machine (to be known as `instance-id`), based on the definition in `machine-def`, into
 Fulcro's state and sends the `::uism/started` event.
 
-==== The Actor Map
+=== The Actor Map
 
 The `actor-map` is a map keyed by actor-id that lets the state machine know what components in your Fulcro app are being
 acted upon.  It also supplied the necessary information that is needed when doing remote mutations
@@ -283,7 +283,7 @@ A component instance (e.g. `this`):: A component instance can be found using the
 (e.g. `(prim/ref->any reconciler [:person/by-id 1])`).  A component instance is sufficient for the state
 machine to find the corrent ident and query for the UI component, so it will work with loads/mutations.
 
-=== Example Starts
+== Example Starts
 
 For example, to start the above state machine with an instance ID of `::loginsm`:
 
@@ -314,7 +314,7 @@ need to tell the state machine system what Fulcro component class is used for no
 Failing to do so may cause your state machine to misbehave (the state machine actually tries to derive the class from
 Fulcro's indexes, but that will only work if the component is on-screen).
 
-=== Dynamic Actor Idents
+== Dynamic Actor Idents
 
 If you do not know the ident of an actor when the machine begins, or if the ident of an actor can
 change over time, then use `reset-actor-ident`.
@@ -334,7 +334,7 @@ Then for example in an event you can update the actor's ident like so
 ```
 
 
-=== Triggering Events
+== Triggering Events
 
 Now that you have a state machine running it is ready to receive events.  It will have already
 run the initial state handler once, which means it will have already set up the state in such
@@ -369,7 +369,7 @@ additional parameter:
 (uism/trigger! reconciler ::loginsm :failure {:message "Server is down. Try in 15 minutes."})
 ```
 
-== Mutations and State Machines
+= Mutations and State Machines
 
 Functions are included to trigger *remote* mutations.  The state machine handlers are
 already an implementation of the optimistic side of a mutation, so really what we need is a way to trigger
@@ -415,7 +415,7 @@ IMPORTANT: If you need to return a class type that is not one of your actors, th
 represent it (even if you do no other manipulation for it). That will keep your state machine code decoupled from
 your UI code, which will prevent circular references and state machine code reuse.
 
-== Loads and State Machines
+= Loads and State Machines
 
 The API includes these functions for doing loads in the context of a running state
 machine:
@@ -437,7 +437,7 @@ NOTE: The helper function `(uism/actor-class actor-name)` can be used to retriev
 class for an actor (if available). This should always be used in preference to the `component-class` option above
 since the helper function does not couple your state machine code to UI code.
 
-== Timer Events
+= Timer Events
 
 Many UI interactions work better with some kind of timeout.  For example, you don't want to issue a load on an
 autocomplete search field until the user stops typing for 300ms, or perhaps you'd like to close a dialog and show
@@ -453,7 +453,7 @@ waiting. If it returns `true` then the timeout will be auto-cancelled.
 
 You can also explcitly cancel a timeout with `(uism/clear-timeout! env timer-id)
 
-== Sending Events FROM one State Machine to Another
+= Sending Events FROM one State Machine to Another
 
 Version 0.0.21+ includes support for sending events from one state machine to another. The mechanism
 for doing so is the `trigger` method (no `!`). It takes and returns a handler `env`, and is composed
@@ -468,14 +468,14 @@ into the threading of `env` in your handlers:
 
 This has the effect of queueing the event for after the current handler has finished.
 
-=== Nested Event Order
+== Nested Event Order
 
 State machines that trigger events may cause handlers to run that themselves trigger further events.
 The ordering of such a cascade will be that of function call semantics. That is to say that if state
 machine A triggers an event on B and D, and B triggers an event on C, then the runtime evaluation
 order will be A, B, C, D.
 
-=== State Machine ID Passing
+== State Machine ID Passing
 
 In order to keep your state machine definition free from coupling, you will not want to embed the ID of
 some state machine into the code of the handler (though you can certainly do so if you wish). It is
@@ -501,7 +501,7 @@ state machine's local store:
                                 (uism/store :mid other-machine))))}}}}})
 ```
 
-== Aborting Loads and Mutations
+= Aborting Loads and Mutations
 
 The built-in Fulcro support for aborting network requests requires the use of the actual application.  The general
 recommendation is to save your app into an atom via Fulcro's `started-callback`.
@@ -525,14 +525,14 @@ machine handlers:
       env)
 ```
 
-== Full Example
+= Full Example
 
 This combination of feature leads to very clean UI code.
 
 See https://github.com/fulcrologic/fulcro-incubator/blob/master/src/workspaces/fulcro/incubator/state_machine_ws.cljs[state_machine_ws.cljs]
 for the full example.
 
-== Parting Thoughts
+= Parting Thoughts
 
 This relatively small set of primitives gives you quite a bit of power.  Here are some things you
 can do with this system that you might not immediately realize:
@@ -571,7 +571,7 @@ are also easy to make "tunable" by using the state machine's local storage:
   {:dropdown-key-timeout 200})
 ```
 
-=== Form Validation
+== Form Validation
 
 My initial experiments lead me towards the opinion that form validation does not generally belong in a state
 machine. Here are my reasons:

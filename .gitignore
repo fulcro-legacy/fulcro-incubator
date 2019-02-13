@@ -17,3 +17,4 @@ fulcro-incubator.iml
 .idea
 out
 .DS_Store
+docs/.asciidoctor
