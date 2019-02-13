@@ -13,7 +13,6 @@
     [nubank.workspaces.card-types.fulcro :as ct.fulcro]
     [nubank.workspaces.lib.fulcro-portal :as f.portal]
     [fulcro.client.mutations :as m]
-    [taoensso.timbre :as log]
     [fulcro.client.data-fetch :as df]
     [fulcro.incubator.dynamic-routing :as dr]
     [fulcro.client :as fc]))
@@ -84,7 +83,7 @@
    :will-leave      (fn [props] (js/console.log "Leaving user " (:user/id props)) true)}
   (dom/div (str "User: name = " name)))
 
-(defrouter RootRouter2 [this {:keys [current-state pending-path-segment]}]
+(defrouter RootRouter2 [this {:keys [current-state pending-path-segment route-factory route-props]}]
   {:router-targets     [Settings User]
    :componentDidUpdate (fn [pp ps]
                          (let [current-state        (uism/get-active-state this :RootRouter2)
@@ -94,10 +93,12 @@
                                current-path         (uism/retrieve sm-env :path-segment)]
                            (js/console.log :rr2-updated current-state :pending-path pending-path-segment
                              :current-path current-path)))}
+  (js/console.log :route-factory (meta route-factory))
+  (js/console.log :route-props route-props)
   (case current-state
     :pending (dom/div "Loading a user..."
                (dom/button {:onClick #(dr/change-route this ["settings" "pane2"])} "cancel"))
-    :failed (do
+    :failed (dom/div
               (dom/div "Ooops!")
               (dom/button {:onClick #(dr/change-route this ["settings"])} "Go to settings"))
     (dom/div "...")))
@@ -108,7 +109,8 @@
   {:query         [{:router (prim/get-query RootRouter2)}]
    :initial-state {:router {:x 2}}}
   (dom/div
-    (dom/button {:onClick (fn [] (dr/change-route this ["user" 1]))} "Change route to /user/1")
+    (dom/button {:onClick (fn [] (dr/change-route this ["user" 1] {:deferred-timeout 10
+                                                                   :error-timeout    100}))} "Change route to /user/1")
     (dom/button {:onClick (fn [] (dr/change-route this ["settings"]))} "Change route to /settings")
     (dom/button {:onClick (fn [] (dr/change-route this ["settings" "pane1"]))} "Change route to /settings/pane1")
     (dom/button {:onClick (fn [] (dr/change-route this ["settings" "pane2"]))} "Change route to /settings/pane2")
@@ -130,4 +132,4 @@
      ::f.portal/app        {:started-callback (fn [{:keys [reconciler] :as app}]
                                                 (reset! fulcro-app app)
                                                 (dr/change-route reconciler ["settings" "pane1"]))
-                            :networking       (server/new-server-emulator (server/fulcro-parser) 1000)}}))
+                            :networking       (server/new-server-emulator (server/fulcro-parser) 2000)}}))

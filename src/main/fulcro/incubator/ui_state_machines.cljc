@@ -53,7 +53,7 @@
 (s/def ::local-storage (s/map-of keyword? any?))
 (s/def ::timeout pos-int?)
 (s/def ::timer-id (s/with-gen any? #(s/gen #{:timer-1 42})))
-(s/def ::cancel-fn (s/with-gen fn? #(s/gen #{#{:event! :other!}})))
+(s/def ::cancel-fn (s/with-gen (s/or :f fn? :s set?) #(s/gen #{#{:event! :other!}})))
 (s/def ::cancel-on (s/with-gen (fn fn-or-set* [i] (let [f (-> i meta :cancel-on)]
                                                     (or (fn? f) (set? f)))) #(s/gen #{(with-meta {} {:cancel-on (fn [e] true)})})))
 (s/def ::js-timer (s/with-gen #(-> % meta :timer boolean) #(s/gen #{(with-meta {} {:timer {}})})))
@@ -402,9 +402,9 @@
    (set-aliased-value env alias new-value)))
 (>fdef assoc-aliased
   ([env alias new-value alias-2 value-2 & kv-pairs]
-   [::env ::alias any? ::alias any? (s/* any?) => ::env])
+    [::env ::alias any? ::alias any? (s/* any?) => ::env])
   ([env alias new-value]
-   [::env ::alias any? => ::env]))
+    [::env ::alias any? => ::env]))
 
 (defn update-aliased
   "Similar to clojure.core/update but works on UISM env and aliases."
@@ -420,15 +420,15 @@
    (assoc-aliased env k (apply f (alias-value env k) x y z more))))
 (>fdef update-aliased
   ([env k f]
-   [::env ::alias any? => ::env])
+    [::env ::alias any? => ::env])
   ([env k f x]
-   [::env ::alias any? any? => ::env])
+    [::env ::alias any? any? => ::env])
   ([env k f x y]
-   [::env ::alias any? any? any? => ::env])
+    [::env ::alias any? any? any? => ::env])
   ([env k f x y z]
-   [::env ::alias any? any? any? any? => ::env])
+    [::env ::alias any? any? any? any? => ::env])
   ([env k f x y z & more]
-   [::env ::alias any? any? any? any? (s/* any?) => ::env]))
+    [::env ::alias any? any? any? any? (s/* any?) => ::env]))
 
 (declare apply-action)
 
@@ -479,7 +479,7 @@
 (>fdef integrate-ident
   [env ident & named-parameters]
   [::env ::fulcro-ident
-   (s/* (s/or :name #{:prepend :append} :param ::fulcro-ident))
+   (s/* (s/cat :name #{:prepend :append} :param keyword?))
    => ::env])
 
 (defn remove-ident
@@ -732,7 +732,7 @@
   (let [sm-env       (state-machine-env @state ref asm-id event-id event-data)
         handler      (active-state-handler sm-env)
         valued-env   (apply-event-value sm-env params)
-        handled-env  (handler valued-env)
+        handled-env  (handler (assoc valued-env ::fulcro-reconciler reconciler))
         final-env    (as-> (or handled-env valued-env) e
                        (clear-timeouts-on-event! e event-id)
                        (schedule-timeouts! reconciler e))
@@ -1009,13 +1009,15 @@
 (defn convert-load-options
   "INTERNAL: Convert SM load options into Fulcro load options."
   [env options]
-  (let [{::keys [post-event post-event-params fallback-event fallback-event-params]} options
+  (let [{::keys [post-event post-event-params fallback-event fallback-event-params target-actor target-alias]} options
         {:keys [marker]} options
         marker  (if (nil? marker) false marker)             ; force marker to false if it isn't set
         {::keys [asm-id]} env
-        options (-> (dissoc options ::post-event ::post-event-params ::fallback-event ::fallback-event-params ::prim/component-class)
+        options (-> (dissoc options ::post-event ::post-event-params ::fallback-event ::fallback-event-params ::prim/component-class
+                      ::target-alias ::target-actor)
                   (assoc :marker marker :abort-id asm-id :fallback `handle-load-error :post-mutation-params (merge post-event-params {::asm-id asm-id}))
                   (cond->
+                    (or target-actor target-alias) (assoc :target (compute-target env options))
                     post-event (->
                                  (assoc :post-mutation `trigger-state-machine-event)
                                  (update :post-mutation-params assoc ::event-id post-event))
@@ -1031,26 +1033,33 @@
   "Identical API to fulcro's data fetch `load`, but using a handle `env` instead of a component/reconciler.
    Adds the load request to then env which will be sent to Fulcro as soon as the handler finishes.
 
+   The 3rd argument can be a Fulcro class or a UISM actor name that was registered with `begin!`.
+
   The `options` are as in Fulcro's load, with the following additional keys for convenience:
 
   `::uism/post-event`:: An event to send when the load is done (instead of calling a mutation)
   `::uism/post-event-params`:: Extra parameters to send as event-data on the post-event.
   `::uism/fallback-event`:: The event to send if the load triggers a fallback.
   `::uism/fallback-event-params`:: Extra parameters to send as event-data on a fallback.
+  `::uism/target-actor`:: Set target to a given actor's ident.
+  `::uism/target-alias`:: Set load target to the path defined by the given alias.
 
    NOTE: In general a state machine should declare an actor for items in the machine and use `load-actor` instead of
    this function so that the state definitions themselves need not be coupled (via code) to the UI."
-  ([env key-or-ident component-class]
-   (load env key-or-ident component-class {}))
-  ([env key-or-ident component-class options]
-   (let [options (convert-load-options env options)]
+  ([env key-or-ident component-class-or-actor-name]
+   (load env key-or-ident component-class-or-actor-name {}))
+  ([env key-or-ident component-class-or-actor-name options]
+   (let [options (convert-load-options env options)
+         class   (if (s/valid? ::actor-name component-class-or-actor-name)
+                   (actor-class env component-class-or-actor-name)
+                   component-class-or-actor-name)]
      (update env ::queued-loads (fnil conj []) (cond-> {}
-                                                 component-class (assoc ::prim/component-class component-class)
+                                                 class (assoc ::prim/component-class class)
                                                  key-or-ident (assoc ::query-key key-or-ident)
                                                  options (assoc ::load-options options))))))
 (>fdef load
-  ([env k component-class] [::env ::query-key ::prim/component-class => ::env])
-  ([env k component-class options] [::env ::query-key ::prim/component-class ::load-options => ::env]))
+  ([env k actor-or-class] [::env ::query-key (s/or :a ::actor-name :c ::prim/component-class) => ::env])
+  ([env k actor-or-class options] [::env ::query-key (s/or :a ::actor-name :c ::prim/component-class) ::load-options => ::env]))
 
 (defn load-actor
   "Load (refresh) the given actor. If the actor *is not* on the UI, then you *must* specify

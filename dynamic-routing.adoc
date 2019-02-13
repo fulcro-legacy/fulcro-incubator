@@ -50,7 +50,7 @@ Navigable Code:: During development it should be easy to see (as local concerns)
 
 Introspection:: One should be able to query for the available routes (of loaded code), and the current visible route.
 
-== Routers
+= Routers
 
 Dynamic routing in Fulcro can be easily facilitated by leveraging the UI query, which is a tool of composition that is always guaranteed to be present in a properly-structured application.  Each component's state will be normalized, and the class and relative UI position can be determined by examining the current UI query.
 
@@ -106,9 +106,9 @@ Such routers are simple Fulcro components, and can be composed into the UI just 
 
 IMPORTANT: Routers are true singletons. A router ends up with a dynamic query keyed by the class itself. This means that a given router cannot be used in a UI in more than one place. This seems like a reasonable restriction given that they are so simple to declare at a given tree (sub)root, and are typically very positional in nature.
 
-== Routing Targets
+= Routing Targets
 
-Most of the novelty about routes can now be encoded into normal components with simple declarations (will write a helper macro soon).  The routing novelty is specified by two protocols:
+Most of the novelty about routes can now be encoded into normal components with simple declarations.  The routing novelty is specified by two protocols:
 
 ```
 (ns app
@@ -148,15 +148,22 @@ Route targets can be singletons or regular components that have multiple instanc
 
 NOTE: There is a complete working demo in https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/workspaces/fulcro/incubator/routing_ws.cljs[`routing_ws.cljs`].
 
-== Initial Route
+= Initial Route
 
-The compostion of routers in your UI will result in some overall route that is the "default" at application start.  This is simply the first element of each `defrouter` that is reachable from your root.
+The dynamic routing relies on a call to `change-route` in order to start the routing system.  Therefore you MUST make
+a call to `change-route` on start in order for the dynamic routers to work; however, there is also the concern of what
+gets rendered on the "first frame" of application mount.  Thus, you want there to technically be a "default route"
+in app state as well.
+
+The composition of routers in your UI will result in some overall route that is the "default" at application start
+(as far as initial application state is concerned).
+This is simply the first element of each `defrouter` that is reachable from your root.
 
 The "default" target on a route that is visible at application load MUST have initial state that gives the router something in state to "route to", otherwise you won't be able to see it.
 
 FIXME: The current implementation probably requires all route target components to have initial state, and probably gives a lousy error if they don't. This is because the defrouter macro is assuming it is always there, and is issuing a call to get it for every child.
 
-=== Route Segments and Changing Routes
+== Route Segments and Changing Routes
 
 UI Composition determines the available routes, and each route target must declare what part of the current "route" they can consume.  The declaration is a vector of literal strings and keywords:
 
@@ -164,7 +171,8 @@ UI Composition determines the available routes, and each route target must decla
 ["user" :user-id]
 ```
 
-Strings in the route segment *MUST* exactly match an incoming path prefix or the route does not match.  The keyword parameters are *route parameters*, and *capture* the incoming route element *as a string* (this ensures that URI's will work just as well as code-based paths that might contain other data types).
+Strings in the route segment *MUST* exactly match an incoming path prefix or the route does not match.  The keyword parameters are *route parameters*, and *capture* the incoming route element *as a string* (this ensures that URI's will work just as well as code-based paths that might contain other data types).  Any data types you pass in the vector are converted via `str`, so if you need a
+more complicated coercion please do it before using it to change the route.
 
 Path segments compose in the UI. In our earlier diagram the `Settings` component might have the route segments: `["settings"]` and the `User` component `["user" :user-id]".  The `Pane2` component might list `["pane1"]`.  Now, since the pane 1 component is currently *nested* as a target of the router underneath the settings component, we can derive that the *full path* to Pane 1 in *this* particular UI layout is `["settings" "pane1"]`. This is the next critical step in our composition:  Routers in a tree look for targets that can consume *what remains* of the path after parent targets have *consumed* the portion that matched those route segments.
 
@@ -195,13 +203,17 @@ Additional useful functions are:
 
 NOTE: This library will not have any code that connects HTML5 routing events to UI routing.  That is a relatively simple exercise and there are plenty of libraries that can help with the task.  The logic of transforming a URI to the correct vector and calling a function is trivial, and the concern of aliasing and legacy path transforms is something you will likely want to put in the middle of that.
 
-=== Aborting a Route Change
+== Aborting a Route Change
 
-NOTE: Not yet implemented. Probably needs more parameters, such as the "route being attempted" in case the component wants to save it for a later "continue" operation (e.g. "Are You Sure?", "Yes").
+The `will-leave` method is called when a target is going to leave the screen, and may return false.
+If it does so AND is active on the screen then it prevents the entire route change.  This allows a screen to hold up
+routing in case edits would be lost, etc.  Of course you should do something in this method to change the UI so the
+user knows what is going on.  This is a non-static method and receives the component, so it can `transact!`, etc.
 
-The `will-leave` method may return false.  If it does so AND is active on the screen then it prevents the entire route change.  This allows a screen to hold up routing in case edits would be lost, etc.  Of course you should do something in this method to change the UI so the user knows what is going on.  This is a non-static method and receives the component, so it can `transact!`, etc.
+TODO: Probably needs more parameters, such as the "route being attempted" in case the component wants to save it
+for a later "continue" operation (e.g. "Are You Sure?", "Yes").
 
-=== Deferred Routing
+== Deferred Routing
 
 There are times when you want to delay a route change based on some I/O operation, like a load or mutation.  A router can do this via the return value of the `will-enter` method:
 
@@ -228,43 +240,51 @@ Pending routes can be completed by calling the `dr/target-ready` mutation with a
   (dom/div ...))
 ```
 
-Note that the route parameters come in via a map keyed by the keyword in your `route-segment`. Remember that the value of these is guaranteed to be a string, so be sure you coerce them if you need them to be a different type.
+Note that the route parameters come in via a map keyed by the keyword in your `route-segment`. Remember that the value of these elements is guaranteed to be a string, so be sure you coerce them if you need them to be a different type.
 
 IMPORTANT: The `will-enter` method *MUST* return the value of a call to either `route-immediate` or `route-deferred`.
 
-==== Deferred UI
+=== Deferred UI
 
-The router uses a state machine internally and sets two timeouts with respect to deferred routes: and error timeout, and a
-deferred timeout.  The error timeout is how long a route can be deferred before it moves to the `:failed` state, and the
-deferred timeout is how long a route can be deferred before it moves to a `:loading` state.
+The router uses a state machine internally and sets two timeouts with respect to deferred routes: and `:error-timeout`, and a
+`:deferred-timeout` (which can be sent with your calls to `change-route`).  The error timeout is how long a route can be
+deferred before it moves to the `:failed` state, and the deferred timeout is how long a route can be deferred before
+it moves to a `:pending` state.
 
 The router can be defined with custom UI for these various states using the `defrouter` macro, which looks much like
 `defsc`, but only allows `:router-targets` in the options map:
 
 ```
-(defrouter MyRouter [this {:keys [current-state pending-path-segment]}]
+(defrouter MyRouter [this {:keys [current-state pending-path-segment route-factory route-props]}]
   {:router-targets [A B C]}
   (case current-state
     :initial (dom/div "What to show when the router is on screen but has never been asked to route")
-    :loading (dom/div "Loading...")
+    :pending (dom/div "Loading...")
     :failed (dom/div "Oops")}))
 ```
 
-`this` *is* the real Fulcro component instance and turns into a `defsc`. The body is only rendered in the initial/loading/failure states to do whatever you deem necessary, just like a normal component. The options map will be passed through (though query/ident/protocols/initial-state will be ignored), so you may define React lifecycle methods and such if that is useful for your particular use-case.
+NOTE: If you do not specify a body for the `defrouter` (e.g. `(defrouter A [_ _] {:router-targets [X Y]})`), then it
+will render whatever route is currently active instead of this "alternate" context-sensitive UI.
 
-IMPORTANT: The props seen in react lifecycles will *not* be what you see in the props of the router body.  The props of the router body are synthesized for your convenience, but raw react lifecycles will see the low-level internal props of the router instead. The id of the router is the same as the ID for the router's UI state machine. Using `uism/current-state` on that ASM will give you the current route state, and looking in that ASM's local store will give you things like the pending segment:
+`this` *is* a real Fulcro component instance and turns into a `defsc`, but the body is only rendered in the
+initial/pending/failure states to do whatever you deem necessary. The options map will be passed through to defsc (though query/ident/protocols/initial-state will be overridden), so you can define React lifecycle methods and such if that is useful for your particular use-case. See the next section for critical notes, though.
 
-```
-(defrouter X [this props]
-  {:router-target ...
-   :componentDidUpdate (fn [pprops pstate]
+The incoming props are actually generated to include a number of useful things:
 
+- `:current-state` - The current (*transitory*) state of the router (:initial, :pending, or :failed)
+- `:pending-path-segment` - Where the router is trying to go in the :pending and :failed state. This will be the
+  concrete path segment that was requested (e.g. `["user" "1"]` and not `["user" :user/id]`).
+- `:route-props` - The props for the current (old, non-pending) route (if there was a route on-screen).
+- `:route-factory` - The function to call to render the current (old, non-pending) route (if there was a route on-screen).
 
-```
+The route factory/props are useful if you want to continue to render the "current" page even though a timeout has
+occurred, but perhaps you want to pass some computed data to indicate progress
+(e.g. `(route-factory (prim/computed route-props {:waiting true}))`).  Of course, you can
+instead `route-immediate`, skip timeouts altogether, and do normal load markers on the target screen. The former
+method is useful on a deferred route that simply has nothing to render until the data is present.  Regular named
+load markers are also a good way of giving user feedback.
 
-The props will contain the current *transitory* state of the router (:initial, :loading, or :failed), and the body can render whatever you choose. The pending-path-segment will be available for the loading/failed states so you know where the user is *trying* to go. This will be the concrete path segment that was requested (e.g. `["user" "1"]` and not `["user" :user/id]`).
-
-You can specify the timeouts when you call `change-route`:
+You can specify overrides for the default timeouts when you call `change-route`:
 
 ```
 (change-route this ["new" "path"] {:error-timeout 2000 :deferred-timeout 200})
@@ -272,13 +292,28 @@ You can specify the timeouts when you call `change-route`:
 
 They default to 5000ms and 100ms.
 
-NOTE: A deferred route that resolves after an error timeout will auto-recover (it will move to the correct resolved
-route and stop showing the error).
+NOTE: A deferred route that resolves after an error timeout *can still auto-recover* if `target-ready` is called
+  after the error timeout (it will move to the correct resolved route and stop showing the error).
 
 NOTE: A request to change the route when a deferred route was in progress will cancel the timeouts and immediately attempt
 the new route.
 
-==== Code Splitting
+==== Router React Lifecycle Methods
+
+The props seen in react lifecycles will *not* be what you see in the props of the router body.  The props of the router body are synthesized for your convenience, but raw react lifecycles will see the low-level internal props of the router instead. The id of the router is the same as the ID for the router's UI state machine. Using `uism/current-state` on that ASM will give you the current route state, and looking in that ASM's local store will give you things like the pending segment. The ID of the active state machine will be
+the keyword name of the router:
+
+```
+(defrouter MyRouter [this props]
+  {:router-target ...
+   :componentDidUpdate (fn [pprops pstate]
+      (let [current-state (uism/current-state this :MyRouter)
+            route-props (:fulcro.incubator.dynamic-routing/current-route pprops)]
+         ...))
+   ...
+```
+
+=== Code Splitting
 
 The route defer mechanism should be sufficient to implement code splitting, where the routing target is the "join point" for the dynamic code.  Basically the component would not include the code-split child in the query or UI initially, but could trigger a code load and defer routing (storing the ident in a place where the loaded code could trigger the completion of the route, and a dynamic query change of the original component to point to the newly loaded component).
 
@@ -313,7 +348,7 @@ TODO: A macro and small lib that wraps this concern.
 
 TODO: A dynamic code load means that there may be path segments in the current route that cannot be evaluated until the code load is complete.  It may be necessary to "re-trigger" a route after a code load to ensure that the path segments have been fully evaluated.  This would be a good use of a relative change route function, which could be run on the newly-loaded sub-components with the remaining path.  I think it should be relatively easy to just defer the rest of the sub-routing until the given route is resolved...that is probably best, as it doesn't require user intervention. The problem with that is that sub-routes may also want to queue I/O, and getting it all queued at once might be preferable to delaying. We could support something like `route-blocked` which would resume routing after the ready signal, and allow the `route-deferred` to continue down the route resolving sub-paths and queuing I/O.  Undecided.
 
-== Full Example
+= Full Example
 
 The workspaces source contains a full working example of this routing system in
 https://github.com/fulcrologic/fulcro-incubator/blob/develop/src/workspaces/fulcro/incubator/routing_ws.cljs

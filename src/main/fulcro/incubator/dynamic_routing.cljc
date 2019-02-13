@@ -4,9 +4,9 @@
     [ghostwheel.core :refer [>fdef => ?]]
     #?(:clj [fulcro.incubator.defsc-extensions :as dext])
     [fulcro.incubator.ui-state-machines :as uism :refer [defstatemachine]]
+    [fulcro.server-render :as ssr]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
-    [taoensso.timbre :as log]
     [clojure.spec.alpha :as s]
     #?(:clj [cljs.analyzer :as ana])
     [fulcro.util :as futil]))
@@ -383,8 +383,7 @@
                     event-data)
                   (uism/trigger! reconciler router-id :route! event-data))
                 (when (seq remaining-path)
-                  (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))))
-     (log/info "Routing request rejected by on-screen router target."))))
+                  (recur (ast-node-for-route target-ast remaining-path) remaining-path))))))))))
 
 (defn change-route
   "Trigger a route change.
@@ -464,14 +463,17 @@
            states-to-render-route (if (seq body)
                                     #{:routed :deferred}
                                     `(constantly true))
-           render-cases           (apply list `(if (~states-to-render-route ~'current-state)
-                                                 (if-let [~'class (fulcro.incubator.dynamic-routing/current-route-class ~'this)]
-                                                   (let [~'factory (prim/factory ~'class)]
-                                                     (~'factory ~'current-route)))
-                                                 (let [~(first arglist) ~'this
-                                                       ~(second arglist) {:pending-path-segment ~'pending-path-segment
-                                                                          :current-state        ~'current-state}]
-                                                   ~@body)))
+           render-cases           (apply list `(let [~'class (fulcro.incubator.dynamic-routing/current-route-class ~'this)]
+                                                 (if (~states-to-render-route ~'current-state)
+                                                   (when ~'class
+                                                     (let [~'factory (prim/factory ~'class)]
+                                                       (~'factory ~'current-route)))
+                                                   (let [~(first arglist) ~'this
+                                                         ~(second arglist) {:pending-path-segment ~'pending-path-segment
+                                                                            :route-props          ~'current-route
+                                                                            :route-factory        (when ~'class (prim/factory ~'class))
+                                                                            :current-state        ~'current-state}]
+                                                     ~@body))))
            options                (merge (dissoc options :router-targets) `{:query         ~query
                                                                             :ident         ~ident-method
                                                                             :protocols     [~'static fulcro.incubator.dynamic-routing/Router
@@ -497,8 +499,13 @@
      Other defsc options - (LIMITED) You may not specify query/initial-state/protocols/ident, but you can define things like react
      lifecycle methods. See defsc.
 
-     The optional body, if defined, will *only* be used if the router is in a pending (deferred) or initial state (:initial,
-     :pending, or :failed), otherwise the actual route target will be rendered.
+     The optional body, if defined, will *only* be used if the router is in one of the following states:
+
+     - `:initial` - No route is set.
+     - `:pending` - A deferred route is taking longer than expected (configurable timeout, default 100ms)
+     - `:failed` - A deferred route took longer than can reasonably be expected (configurable timeout, default 5s)
+
+     otherwise the actual active route target will be rendered.
      "
      [router-sym arglist options & body]
      (defrouter* &env router-sym arglist options body)))
@@ -509,3 +516,41 @@
 
 #?(:clj
    (dext/defextended-defsc defsc-route-target [[`RouteLifecycle false] [`RouteTarget true]]))
+
+(defn ssr-initial-state
+  "(ALPHA) A helper to get initial state database for SSR.
+
+  Returns:
+
+  ```
+  {:db normalized-db
+   :props props-to-render}
+  ```
+
+  IMPORTANT NOTES:
+
+  - `will-enter` for the routes will *not* get a reconciler (since there
+  isn't one).  Be sure your routers will tolerate a nil reconciler.
+  - This has not been well-tested.  It is known to render correct HTML in simple cases, but the initial state
+  may not actually be correct for the starting app with respect to the routers.
+  "
+  [app-root-class root-router-class route-path]
+  (let [initial-tree (prim/get-initial-state app-root-class {})
+        initial-db   (ssr/build-initial-state initial-tree app-root-class)
+        router-ident (prim/get-ident root-router-class {})
+        instance-id  (second router-ident)
+        {:keys [target matching-prefix]} (route-target root-router-class route-path)
+        target-ident (will-enter+ target nil nil)           ; Target in this example needs neither
+        params       {::uism/asm-id           instance-id
+                      ::uism/state-machine-id (::state-machine-id RouterStateMachine)
+                      ::uism/event-data       (merge
+                                                {:path-segment matching-prefix
+                                                 :router       (vary-meta router-ident assoc
+                                                                 :component root-router-class)
+                                                 :target       (vary-meta target-ident assoc
+                                                                 :component target)})
+                      ::uism/actor->ident     {:router (uism/with-actor-class router-ident root-router-class)}}
+        initial-db   (assoc-in initial-db [::uism/asm-id :RootRouter] (uism/new-asm params))]
+    {:db    initial-db
+     :props (prim/db->tree (prim/get-query app-root-class initial-db)
+              initial-db initial-db)}))

@@ -1,5 +1,12 @@
 # Change Log
 
+0.0.28
+------
+- UISM: Added support for alias/actor targeting to load 
+- UISM: Added support for using actor name instead of class in load
+- Dynamic Router: Added preliminary (probably quite alpha) support for SSR state.
+- Dynamic Router: Added additional props for pending route rendering.
+
 0.0.27
 ------
 - Extended UISM functions.
