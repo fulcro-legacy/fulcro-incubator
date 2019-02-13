@@ -1,7 +1,6 @@
 = Routing Features
 :author: Tony Kay
-:revdate: December 2, 2018
-:revnumber: 2
+:revdate: Feb. 12, 2019
 :lang: en
 :encoding: UTF-8
 :doctype: book

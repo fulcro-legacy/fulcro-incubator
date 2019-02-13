@@ -528,8 +528,7 @@ table.CodeRay td.code>pre{padding:0}
 <h1>Routing Features</h1>
 <div class="details">
 <span id="author" class="author">Tony Kay</span><br>
-<span id="revnumber">version 2,</span>
-<span id="revdate">December 2, 2018</span>
+<span id="revdate">Feb. 12, 2019</span>
 </div>
 <div id="toc" class="toc2">
 <div id="toctitle">Table of Contents</div>
@@ -822,20 +821,15 @@ This library will not have any code that connects HTML5 routing events to UI rou
 </div>
 <div class="sect2">
 <h3 id="_aborting_a_route_change"><a class="anchor" href="#_aborting_a_route_change"></a><a class="link" href="#_aborting_a_route_change">3.2. Aborting a Route Change</a></h3>
-<div class="admonitionblock note">
-<table>
-<tr>
-<td class="icon">
-<div class="title">Note</div>
-</td>
-<td class="content">
-Not yet implemented. Probably needs more parameters, such as the "route being attempted" in case the component wants to save it for a later "continue" operation (e.g. "Are You Sure?", "Yes").
-</td>
-</tr>
-</table>
+<div class="paragraph">
+<p>The <code>will-leave</code> method is called when a target is going to leave the screen, and may return false.
+If it does so AND is active on the screen then it prevents the entire route change.  This allows a screen to hold up
+routing in case edits would be lost, etc.  Of course you should do something in this method to change the UI so the
+user knows what is going on.  This is a non-static method and receives the component, so it can <code>transact!</code>, etc.</p>
 </div>
 <div class="paragraph">
-<p>The <code>will-leave</code> method may return false.  If it does so AND is active on the screen then it prevents the entire route change.  This allows a screen to hold up routing in case edits would be lost, etc.  Of course you should do something in this method to change the UI so the user knows what is going on.  This is a non-static method and receives the component, so it can <code>transact!</code>, etc.</p>
+<p>TODO: Probably needs more parameters, such as the "route being attempted" in case the component wants to save it
+for a later "continue" operation (e.g. "Are You Sure?", "Yes").</p>
 </div>
 </div>
 <div class="sect2">
@@ -896,9 +890,10 @@ The <code>will-enter</code> method <strong>MUST</strong> return the value of a c
 <div class="sect3">
 <h4 id="_deferred_ui"><a class="anchor" href="#_deferred_ui"></a><a class="link" href="#_deferred_ui">3.3.1. Deferred UI</a></h4>
 <div class="paragraph">
-<p>The router uses a state machine internally and sets two timeouts with respect to deferred routes: and error timeout, and a
-deferred timeout.  The error timeout is how long a route can be deferred before it moves to the <code>:failed</code> state, and the
-deferred timeout is how long a route can be deferred before it moves to a <code>:loading</code> state.</p>
+<p>The router uses a state machine internally and sets two timeouts with respect to deferred routes: and <code>:error-timeout</code>, and a
+<code>:deferred-timeout</code> (which can be sent with your calls to <code>change-route</code>).  The error timeout is how long a route can be
+deferred before it moves to the <code>:failed</code> state, and the deferred timeout is how long a route can be deferred before
+it moves to a <code>:pending</code> state.</p>
 </div>
 <div class="paragraph">
 <p>The router can be defined with custom UI for these various states using the <code>defrouter</code> macro, which looks much like
@@ -906,41 +901,61 @@ deferred timeout is how long a route can be deferred before it moves to a <code>
 </div>
 <div class="listingblock">
 <div class="content">
-<pre class="CodeRay highlight"><code data-lang="clojure">(defrouter MyRouter [this {<span class="symbol">:keys</span> [current-state pending-path-segment]}]
+<pre class="CodeRay highlight"><code data-lang="clojure">(defrouter MyRouter [this {<span class="symbol">:keys</span> [current-state pending-path-segment route-factory route-props]}]
   {<span class="symbol">:router-targets</span> [A B C]}
   (<span class="keyword">case</span> current-state
     <span class="symbol">:initial</span> (dom/div <span class="string"><span class="delimiter">&quot;</span><span class="content">What to show when the router is on screen but has never been asked to route</span><span class="delimiter">&quot;</span></span>)
-    <span class="symbol">:loading</span> (dom/div <span class="string"><span class="delimiter">&quot;</span><span class="content">Loading...</span><span class="delimiter">&quot;</span></span>)
+    <span class="symbol">:pending</span> (dom/div <span class="string"><span class="delimiter">&quot;</span><span class="content">Loading...</span><span class="delimiter">&quot;</span></span>)
     <span class="symbol">:failed</span> (dom/div <span class="string"><span class="delimiter">&quot;</span><span class="content">Oops</span><span class="delimiter">&quot;</span></span>)}))</code></pre>
 </div>
 </div>
-<div class="paragraph">
-<p><code>this</code> <strong>is</strong> the real Fulcro component instance and turns into a <code>defsc</code>. The body is only rendered in the initial/loading/failure states to do whatever you deem necessary, just like a normal component. The options map will be passed through (though query/ident/protocols/initial-state will be ignored), so you may define React lifecycle methods and such if that is useful for your particular use-case.</p>
-</div>
-<div class="admonitionblock important">
+<div class="admonitionblock note">
 <table>
 <tr>
 <td class="icon">
-<div class="title">Important</div>
+<div class="title">Note</div>
 </td>
 <td class="content">
-The props seen in react lifecycles will <strong>not</strong> be what you see in the props of the router body.  The props of the router body are synthesized for your convenience, but raw react lifecycles will see the low-level internal props of the router instead. The id of the router is the same as the ID for the router&#8217;s UI state machine. Using <code>uism/current-state</code> on that ASM will give you the current route state, and looking in that ASM&#8217;s local store will give you things like the pending segment:
+If you do not specify a body for the <code>defrouter</code> (e.g. <code>(defrouter A [_ _] {:router-targets [X Y]})</code>), then it
+will render whatever route is currently active instead of this "alternate" context-sensitive UI.
 </td>
 </tr>
 </table>
 </div>
-<div class="listingblock">
-<div class="content">
-<pre class="CodeRay highlight"><code data-lang="clojure">(defrouter X [this props]
-  {<span class="symbol">:router-target</span> <span class="keyword">..</span><span class="keyword">.</span>
-   <span class="symbol">:componentDidUpdate</span> (<span class="keyword">fn</span> [pprops pstate]</code></pre>
-</div>
+<div class="paragraph">
+<p><code>this</code> <strong>is</strong> a real Fulcro component instance and turns into a <code>defsc</code>, but the body is only rendered in the
+initial/pending/failure states to do whatever you deem necessary. The options map will be passed through to defsc (though query/ident/protocols/initial-state will be overridden), so you can define React lifecycle methods and such if that is useful for your particular use-case. See the next section for critical notes, though.</p>
 </div>
 <div class="paragraph">
-<p>The props will contain the current <strong>transitory</strong> state of the router (:initial, :loading, or :failed), and the body can render whatever you choose. The pending-path-segment will be available for the loading/failed states so you know where the user is <strong>trying</strong> to go. This will be the concrete path segment that was requested (e.g. <code>["user" "1"]</code> and not <code>["user" :user/id]</code>).</p>
+<p>The incoming props are actually generated to include a number of useful things:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>:current-state</code> - The current (<strong>transitory</strong>) state of the router (:initial, :pending, or :failed)</p>
+</li>
+<li>
+<p><code>:pending-path-segment</code> - Where the router is trying to go in the :pending and :failed state. This will be the
+concrete path segment that was requested (e.g. <code>["user" "1"]</code> and not <code>["user" :user/id]</code>).</p>
+</li>
+<li>
+<p><code>:route-props</code> - The props for the current (old, non-pending) route (if there was a route on-screen).</p>
+</li>
+<li>
+<p><code>:route-factory</code> - The function to call to render the current (old, non-pending) route (if there was a route on-screen).</p>
+</li>
+</ul>
 </div>
 <div class="paragraph">
-<p>You can specify the timeouts when you call <code>change-route</code>:</p>
+<p>The route factory/props are useful if you want to continue to render the "current" page even though a timeout has
+occurred, but perhaps you want to pass some computed data to indicate progress
+(e.g. <code>(route-factory (prim/computed route-props {:waiting true}))</code>).  Of course, you can
+instead <code>route-immediate</code>, skip timeouts altogether, and do normal load markers on the target screen. The former
+method is useful on a deferred route that simply has nothing to render until the data is present.  Regular named
+load markers are also a good way of giving user feedback.</p>
+</div>
+<div class="paragraph">
+<p>You can specify overrides for the default timeouts when you call <code>change-route</code>:</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -957,8 +972,8 @@ The props seen in react lifecycles will <strong>not</strong> be what you see in 
 <div class="title">Note</div>
 </td>
 <td class="content">
-A deferred route that resolves after an error timeout will auto-recover (it will move to the correct resolved
-route and stop showing the error).
+A deferred route that resolves after an error timeout <strong>can still auto-recover</strong> if <code>target-ready</code> is called
+  after the error timeout (it will move to the correct resolved route and stop showing the error).
 </td>
 </tr>
 </table>
@@ -975,6 +990,24 @@ the new route.
 </td>
 </tr>
 </table>
+</div>
+<div class="sect4">
+<h5 id="_router_react_lifecycle_methods"><a class="anchor" href="#_router_react_lifecycle_methods"></a><a class="link" href="#_router_react_lifecycle_methods">Router React Lifecycle Methods</a></h5>
+<div class="paragraph">
+<p>The props seen in react lifecycles will <strong>not</strong> be what you see in the props of the router body.  The props of the router body are synthesized for your convenience, but raw react lifecycles will see the low-level internal props of the router instead. The id of the router is the same as the ID for the router&#8217;s UI state machine. Using <code>uism/current-state</code> on that ASM will give you the current route state, and looking in that ASM&#8217;s local store will give you things like the pending segment. The ID of the active state machine will be
+the keyword name of the router:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="clojure">(defrouter MyRouter [this props]
+  {<span class="symbol">:router-target</span> <span class="keyword">..</span><span class="keyword">.</span>
+   <span class="symbol">:componentDidUpdate</span> (<span class="keyword">fn</span> [pprops pstate]
+      (<span class="keyword">let</span> [current-state (uism/current-state this <span class="symbol">:MyRouter</span>)
+            route-props (<span class="symbol">:fulcro.incubator.dynamic-routing/current-route</span> pprops)]
+         <span class="keyword">..</span><span class="keyword">.</span>))
+   <span class="keyword">..</span><span class="keyword">.</span></code></pre>
+</div>
+</div>
 </div>
 </div>
 <div class="sect3">
@@ -1033,8 +1066,7 @@ the new route.
 </div>
 <div id="footer">
 <div id="footer-text">
-Version 2<br>
-Last updated 2019-02-13 10:32:10 -0800
+Last updated 2019-02-13 14:01:29 -0800
 </div>
 </div>
 </body>

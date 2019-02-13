@@ -1,7 +1,6 @@
 = UI State Machines
 :author: Tony Kay
-:revdate: November 7, 2018
-:revnumber: 2
+:revdate: Feb. 12, 2019
 :lang: en
 :encoding: UTF-8
 :doctype: book

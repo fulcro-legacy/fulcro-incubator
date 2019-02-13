@@ -25,14 +25,16 @@ I've been wanting to add state machine stuff to Fulcro for some time.  I've fina
 it years ago.  I've rewritten just a couple of things with it so far, and the results are so nice I can't wait
 to promote this thing out to Fulcro or its own library.
 
-For now it is here, and the documentation is in https://github.com/fulcrologic/fulcro-incubator/blob/develop/state-machine-docs.adoc[state-machine-docs.adoc]
+For now it is here, and the documentation is in the root of the repository in adoc format, and also available in
+https://fulcrologic.github.io/fulcro-incubator/state-machines.html[HTML].
 
 Try them for your login form, and I bet you'll suddenly want to use them everywhere!
 
 == Improved UI Routing
 
 A new routing system based on dynamic queries with various cool features is in the dynamic-routing namespace. See
-the documentation at https://github.com/fulcrologic/fulcro-incubator/blob/develop/dynamic-routing.adoc[dynamic-routing.adoc]
+the documentation at https://github.com/fulcrologic/fulcro-incubator/blob/develop/dynamic-routing.adoc[dynamic-routing.adoc],
+or in the https://fulcrologic.github.io/fulcro-incubator/routing.html[HTML] file.
 
 
 == DB Helpers
