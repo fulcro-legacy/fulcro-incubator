@@ -53,7 +53,7 @@
 (s/def ::local-storage (s/map-of keyword? any?))
 (s/def ::timeout pos-int?)
 (s/def ::timer-id (s/with-gen any? #(s/gen #{:timer-1 42})))
-(s/def ::cancel-fn (s/with-gen fn? #(s/gen #{#{:event! :other!}})))
+(s/def ::cancel-fn (s/with-gen (s/or :f fn? :s set?) #(s/gen #{#{:event! :other!}})))
 (s/def ::cancel-on (s/with-gen (fn fn-or-set* [i] (let [f (-> i meta :cancel-on)]
                                                     (or (fn? f) (set? f)))) #(s/gen #{(with-meta {} {:cancel-on (fn [e] true)})})))
 (s/def ::js-timer (s/with-gen #(-> % meta :timer boolean) #(s/gen #{(with-meta {} {:timer {}})})))
@@ -732,7 +732,7 @@
   (let [sm-env       (state-machine-env @state ref asm-id event-id event-data)
         handler      (active-state-handler sm-env)
         valued-env   (apply-event-value sm-env params)
-        handled-env  (handler valued-env)
+        handled-env  (handler (assoc valued-env ::fulcro-reconciler reconciler))
         final-env    (as-> (or handled-env valued-env) e
                        (clear-timeouts-on-event! e event-id)
                        (schedule-timeouts! reconciler e))

@@ -205,9 +205,13 @@ NOTE: This library will not have any code that connects HTML5 routing events to 
 
 == Aborting a Route Change
 
-NOTE: Not yet implemented. Probably needs more parameters, such as the "route being attempted" in case the component wants to save it for a later "continue" operation (e.g. "Are You Sure?", "Yes").
+The `will-leave` method is called when a target is going to leave the screen, and may return false.
+If it does so AND is active on the screen then it prevents the entire route change.  This allows a screen to hold up
+routing in case edits would be lost, etc.  Of course you should do something in this method to change the UI so the
+user knows what is going on.  This is a non-static method and receives the component, so it can `transact!`, etc.
 
-The `will-leave` method may return false.  If it does so AND is active on the screen then it prevents the entire route change.  This allows a screen to hold up routing in case edits would be lost, etc.  Of course you should do something in this method to change the UI so the user knows what is going on.  This is a non-static method and receives the component, so it can `transact!`, etc.
+TODO: Probably needs more parameters, such as the "route being attempted" in case the component wants to save it
+for a later "continue" operation (e.g. "Are You Sure?", "Yes").
 
 == Deferred Routing
 
@@ -242,37 +246,45 @@ IMPORTANT: The `will-enter` method *MUST* return the value of a call to either `
 
 === Deferred UI
 
-The router uses a state machine internally and sets two timeouts with respect to deferred routes: and error timeout, and a
-deferred timeout.  The error timeout is how long a route can be deferred before it moves to the `:failed` state, and the
-deferred timeout is how long a route can be deferred before it moves to a `:loading` state.
+The router uses a state machine internally and sets two timeouts with respect to deferred routes: and `:error-timeout`, and a
+`:deferred-timeout` (which can be sent with your calls to `change-route`).  The error timeout is how long a route can be
+deferred before it moves to the `:failed` state, and the deferred timeout is how long a route can be deferred before
+it moves to a `:pending` state.
 
 The router can be defined with custom UI for these various states using the `defrouter` macro, which looks much like
 `defsc`, but only allows `:router-targets` in the options map:
 
 ```
-(defrouter MyRouter [this {:keys [current-state pending-path-segment]}]
+(defrouter MyRouter [this {:keys [current-state pending-path-segment route-factory route-props]}]
   {:router-targets [A B C]}
   (case current-state
     :initial (dom/div "What to show when the router is on screen but has never been asked to route")
-    :loading (dom/div "Loading...")
+    :pending (dom/div "Loading...")
     :failed (dom/div "Oops")}))
 ```
 
-`this` *is* the real Fulcro component instance and turns into a `defsc`. The body is only rendered in the initial/loading/failure states to do whatever you deem necessary, just like a normal component. The options map will be passed through (though query/ident/protocols/initial-state will be ignored), so you may define React lifecycle methods and such if that is useful for your particular use-case.
+NOTE: If you do not specify a body for the `defrouter` (e.g. `(defrouter A [_ _] {:router-targets [X Y]})`), then it
+will render whatever route is currently active instead of this "alternate" context-sensitive UI.
 
-IMPORTANT: The props seen in react lifecycles will *not* be what you see in the props of the router body.  The props of the router body are synthesized for your convenience, but raw react lifecycles will see the low-level internal props of the router instead. The id of the router is the same as the ID for the router's UI state machine. Using `uism/current-state` on that ASM will give you the current route state, and looking in that ASM's local store will give you things like the pending segment:
+`this` *is* a real Fulcro component instance and turns into a `defsc`, but the body is only rendered in the
+initial/pending/failure states to do whatever you deem necessary. The options map will be passed through to defsc (though query/ident/protocols/initial-state will be overridden), so you can define React lifecycle methods and such if that is useful for your particular use-case. See the next section for critical notes, though.
 
-```
-(defrouter X [this props]
-  {:router-target ...
-   :componentDidUpdate (fn [pprops pstate]
+The incoming props are actually generated to include a number of useful things:
 
+- `:current-state` - The current (*transitory*) state of the router (:initial, :pending, or :failed)
+- `:pending-path-segment` - Where the router is trying to go in the :pending and :failed state. This will be the
+  concrete path segment that was requested (e.g. `["user" "1"]` and not `["user" :user/id]`).
+- `:route-props` - The props for the current (old, non-pending) route (if there was a route on-screen).
+- `:route-factory` - The function to call to render the current (old, non-pending) route (if there was a route on-screen).
 
-```
+The route factory/props are useful if you want to continue to render the "current" page even though a timeout has
+occurred, but perhaps you want to pass some computed data to indicate progress
+(e.g. `(route-factory (prim/computed route-props {:waiting true}))`).  Of course, you can
+instead `route-immediate`, skip timeouts altogether, and do normal load markers on the target screen. The former
+method is useful on a deferred route that simply has nothing to render until the data is present.  Regular named
+load markers are also a good way of giving user feedback.
 
-The props will contain the current *transitory* state of the router (:initial, :loading, or :failed), and the body can render whatever you choose. The pending-path-segment will be available for the loading/failed states so you know where the user is *trying* to go. This will be the concrete path segment that was requested (e.g. `["user" "1"]` and not `["user" :user/id]`).
-
-You can specify the timeouts when you call `change-route`:
+You can specify overrides for the default timeouts when you call `change-route`:
 
 ```
 (change-route this ["new" "path"] {:error-timeout 2000 :deferred-timeout 200})
@@ -280,11 +292,26 @@ You can specify the timeouts when you call `change-route`:
 
 They default to 5000ms and 100ms.
 
-NOTE: A deferred route that resolves after an error timeout will auto-recover (it will move to the correct resolved
-route and stop showing the error).
+NOTE: A deferred route that resolves after an error timeout *can still auto-recover* if `target-ready` is called
+  after the error timeout (it will move to the correct resolved route and stop showing the error).
 
 NOTE: A request to change the route when a deferred route was in progress will cancel the timeouts and immediately attempt
 the new route.
+
+==== Router React Lifecycle Methods
+
+The props seen in react lifecycles will *not* be what you see in the props of the router body.  The props of the router body are synthesized for your convenience, but raw react lifecycles will see the low-level internal props of the router instead. The id of the router is the same as the ID for the router's UI state machine. Using `uism/current-state` on that ASM will give you the current route state, and looking in that ASM's local store will give you things like the pending segment. The ID of the active state machine will be
+the keyword name of the router:
+
+```
+(defrouter MyRouter [this props]
+  {:router-target ...
+   :componentDidUpdate (fn [pprops pstate]
+      (let [current-state (uism/current-state this :MyRouter)
+            route-props (:fulcro.incubator.dynamic-routing/current-route pprops)]
+         ...))
+   ...
+```
 
 === Code Splitting
 

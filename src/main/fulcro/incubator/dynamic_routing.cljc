@@ -463,14 +463,17 @@
            states-to-render-route (if (seq body)
                                     #{:routed :deferred}
                                     `(constantly true))
-           render-cases           (apply list `(if (~states-to-render-route ~'current-state)
-                                                 (if-let [~'class (fulcro.incubator.dynamic-routing/current-route-class ~'this)]
-                                                   (let [~'factory (prim/factory ~'class)]
-                                                     (~'factory ~'current-route)))
-                                                 (let [~(first arglist) ~'this
-                                                       ~(second arglist) {:pending-path-segment ~'pending-path-segment
-                                                                          :current-state        ~'current-state}]
-                                                   ~@body)))
+           render-cases           (apply list `(let [~'class (fulcro.incubator.dynamic-routing/current-route-class ~'this)]
+                                                 (if (~states-to-render-route ~'current-state)
+                                                   (when ~'class
+                                                     (let [~'factory (prim/factory ~'class)]
+                                                       (~'factory ~'current-route)))
+                                                   (let [~(first arglist) ~'this
+                                                         ~(second arglist) {:pending-path-segment ~'pending-path-segment
+                                                                            :route-props          ~'current-route
+                                                                            :route-factory        (when ~'class (prim/factory ~'class))
+                                                                            :current-state        ~'current-state}]
+                                                     ~@body))))
            options                (merge (dissoc options :router-targets) `{:query         ~query
                                                                             :ident         ~ident-method
                                                                             :protocols     [~'static fulcro.incubator.dynamic-routing/Router
@@ -496,8 +499,13 @@
      Other defsc options - (LIMITED) You may not specify query/initial-state/protocols/ident, but you can define things like react
      lifecycle methods. See defsc.
 
-     The optional body, if defined, will *only* be used if the router is in a pending (deferred) or initial state (:initial,
-     :pending, or :failed), otherwise the actual route target will be rendered.
+     The optional body, if defined, will *only* be used if the router is in one of the following states:
+
+     - `:initial` - No route is set.
+     - `:pending` - A deferred route is taking longer than expected (configurable timeout, default 100ms)
+     - `:failed` - A deferred route took longer than can reasonably be expected (configurable timeout, default 5s)
+
+     otherwise the actual active route target will be rendered.
      "
      [router-sym arglist options & body]
      (defrouter* &env router-sym arglist options body)))
