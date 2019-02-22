@@ -90,7 +90,7 @@
                                                                         :marker               false
                                                                         :post-mutation-params {:target [:user/id user-id]}}))))
    :will-leave      (fn [props] (js/console.log "Leaving user " (:user/id props)) true)}
-  (dom/div (str "User: name = " name)))
+  (dom/div (str "User: name = " name " with computed props " (prim/get-computed this))))
 
 (defrouter RootRouter2 [this {:keys [current-state pending-path-segment route-factory route-props]}]
   {:router-targets     [Settings User]
@@ -122,7 +122,7 @@
     (dom/button {:onClick (fn [] (dr/change-route this ["settings" "pane1"]))} "Change route to /settings/pane1")
     (dom/button {:onClick (fn [] (dr/change-route this ["settings" "pane2"]))} "Change route to /settings/pane2")
     (dom/button {:onClick (fn [] (js/console.log (dr/current-route this this)))} "Log current route")
-    (ui-root-router-2 router)))
+    (ui-root-router-2 (prim/computed router {:X 1}))))
 
 (server/defquery-entity :user/id
   (value [env id params]
