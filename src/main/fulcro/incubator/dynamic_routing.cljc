@@ -100,20 +100,30 @@
                     routers)]
     router-id))
 
-(defn target-ready*
-  "Mutation helper: apply any pending route segment that has the `target` ident."
-  [state-map target]
-  (let [router-id (router-for-pending-target state-map target)]
-    (if router-id
-      (apply-route* state-map (get-in state-map [::id router-id ::pending-route]))
-      state-map)))
+(defn target-ready!
+  "Indicate a target is ready.  Safe to use from within mutations.
 
-(defmutation target-ready [{:keys [target]}]
+  target - The ident that was originally listed as a deferred target."
+  [component-or-reconciler target]
+  ;; Normal triggers are deferred, but in this case we could be called due to an ongoing routing sequence, where multiple
+  ;; triggers occur.  We defer this particular event a bit more, just to ensure that it doesn't come too early
+  ;; in the case where the user is using deferred routing to do something immediate in a mutation (2 animation frames = 32ms).
+  #?(:cljs
+     (js/setTimeout
+       #(let [reconciler (if (prim/component? component-or-reconciler) (prim/get-reconciler component-or-reconciler) component-or-reconciler)
+              state-map  (-> reconciler prim/app-state deref)
+              router-id  (router-for-pending-target state-map target)]
+          (when router-id
+            (log/debug "Router" router-id "notified that pending route is ready.")
+            (uism/trigger! component-or-reconciler router-id :ready!)))
+       32)))
+
+(defmutation target-ready
+  "Mutation: Indicate that a target is ready."
+  [{:keys [target]}]
   (action [{:keys [reconciler state]}]
-    (when-let [router-id (router-for-pending-target @state target)]
-      (log/debug "Router" router-id "notified that pending route is ready.")
-      (uism/trigger! reconciler router-id :ready!)))
-  (refresh [_] [:route]))
+    (target-ready! reconciler target))
+  (refresh [_] [::current-route]))
 
 (defn router? [component]
   (and component
@@ -217,11 +227,17 @@
 (defn mark-route-pending* [state-map {:keys [router target] :as params}]
   (assoc-in state-map (conj router ::pending-route) params))
 
-(defn ready-handler [env]
-  (-> env
-    (uism/store :path-segment (uism/retrieve env :pending-path-segment))
-    (uism/store :pending-path-segment [])
-    (uism/apply-action target-ready* (uism/retrieve env :target))))
+(letfn [(target-ready*
+          [state-map target]
+          (let [router-id (router-for-pending-target state-map target)]
+            (if router-id
+              (apply-route* state-map (get-in state-map [::id router-id ::pending-route]))
+              state-map)))]
+  (defn ready-handler [env]
+    (-> env
+      (uism/store :path-segment (uism/retrieve env :pending-path-segment))
+      (uism/store :pending-path-segment [])
+      (uism/apply-action target-ready* (uism/retrieve env :target)))))
 
 (defn fail-handler [env] env)
 
@@ -560,33 +576,33 @@
               initial-db initial-db)}))
 
 #_(defn all-reachable-routers
-  "Returns a sequence of all of the routers reachable in the query of the app."
-  [state-map component-class]
-  (let [root-query  (prim/get-query component-class state-map)
-        {:keys [children]} (prim/query->ast root-query)
-        get-routers (fn get-routers* [nodes]
-                      (reduce
-                        (fn [acc {:keys [component children]}]
-                          (into (if (router? component)
-                                  (conj acc component)
-                                  acc)
-                            (get-routers* children)))
-                        []
-                        nodes))]
-    (get-routers children)))
+    "Returns a sequence of all of the routers reachable in the query of the app."
+    [state-map component-class]
+    (let [root-query  (prim/get-query component-class state-map)
+          {:keys [children]} (prim/query->ast root-query)
+          get-routers (fn get-routers* [nodes]
+                        (reduce
+                          (fn [acc {:keys [component children]}]
+                            (into (if (router? component)
+                                    (conj acc component)
+                                    acc)
+                              (get-routers* children)))
+                          []
+                          nodes))]
+      (get-routers children)))
 
 #_(defn initialize!
-  "Initialize the routing system.  This ensures that all routers have state machines in app state."
-  [reconciler]
-  (let [state-map (-> reconciler prim/app-state deref)
-        root      (prim/app-root reconciler)
-        routers   (all-reachable-routers state-map root)
-        tx        (mapv (fn [r]
-                          (let [router-ident (prim/get-ident r {})
-                                router-id    (second router-ident)]
-                            (uism/begin {::uism/asm-id           router-id
-                                         ::uism/state-machine-id (::uism/state-machine-id RouterStateMachine)
-                                         ::uism/event-data       {:path-segment []
-                                                                  :router       (vary-meta router-ident assoc :component r)}
-                                         ::uism/actor->ident     {:router (uism/with-actor-class router-ident r)}}))) routers)]
-    (prim/transact! reconciler tx)))
+    "Initialize the routing system.  This ensures that all routers have state machines in app state."
+    [reconciler]
+    (let [state-map (-> reconciler prim/app-state deref)
+          root      (prim/app-root reconciler)
+          routers   (all-reachable-routers state-map root)
+          tx        (mapv (fn [r]
+                            (let [router-ident (prim/get-ident r {})
+                                  router-id    (second router-ident)]
+                              (uism/begin {::uism/asm-id           router-id
+                                           ::uism/state-machine-id (::uism/state-machine-id RouterStateMachine)
+                                           ::uism/event-data       {:path-segment []
+                                                                    :router       (vary-meta router-ident assoc :component r)}
+                                           ::uism/actor->ident     {:router (uism/with-actor-class router-ident r)}}))) routers)]
+      (prim/transact! reconciler tx)))

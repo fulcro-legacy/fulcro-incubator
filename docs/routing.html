@@ -706,7 +706,11 @@ Routers are true singletons. A router ends up with a dynamic query keyed by the 
 <div class="title">Warning</div>
 </td>
 <td class="content">
-<code>will-enter</code> MUST NOT side-effect, but must instead do any I/O in the lambda passed to <code>route-deferred</code>. It must also trigger the <code>dr/target-ready</code> mutation to indicate that the route is ready.
+<code>will-enter</code> SHOULD NOT side-effect (order of operations could cause strange behavior), but must instead do
+any I/O in the lambda passed to <code>route-deferred</code>.
+It must also trigger the <code>dr/target-ready</code> mutation to indicate that the route is ready. You can use plain <code>transact!</code>
+to start a mutation with route-deferred, but the mutation must use <code>target-ready!</code> to send the signal (since you&#8217;re already in a mutation
+at that point).
 </td>
 </tr>
 </table>
@@ -734,19 +738,28 @@ There is a complete working demo in <a href="https://github.com/fulcrologic/fulc
 <div class="paragraph">
 <p>The dynamic routing relies on a call to <code>change-route</code> in order to start the routing system.  Therefore you MUST make
 a call to <code>change-route</code> on start in order for the dynamic routers to work; however, there is also the concern of what
-gets rendered on the "first frame" of application mount.  Thus, you want there to technically be a "default route"
-in app state as well.</p>
+gets rendered on the "first frame" of application mount.</p>
 </div>
 <div class="paragraph">
-<p>The composition of routers in your UI will result in some overall route that is the "default" at application start
-(as far as initial application state is concerned).
-This is simply the first element of each <code>defrouter</code> that is reachable from your root.</p>
+<p>Your top-most router will be in an "uninitialized" state on initial load. You can use the body of that router to
+render the "first frame" of your mounted app:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="clojure">(defrouter RootRouter2 [this props]
+  {<span class="symbol">:router-targets</span>     [Settings User]}
+  (<span class="keyword">case</span> current-state
+    <span class="symbol">:pending</span> (dom/div <span class="string"><span class="delimiter">&quot;</span><span class="content">Loading...</span><span class="delimiter">&quot;</span></span>)
+    <span class="symbol">:failed</span> (dom/div <span class="string"><span class="delimiter">&quot;</span><span class="content">Failed!</span><span class="delimiter">&quot;</span></span>)
+    <span class="comment">;; default will be used when the current state isn't yet set</span>
+    (dom/div <span class="string"><span class="delimiter">&quot;</span><span class="content">No route selected.</span><span class="delimiter">&quot;</span></span>)))</code></pre>
+</div>
 </div>
 <div class="paragraph">
-<p>The "default" target on a route that is visible at application load MUST have initial state that gives the router something in state to "route to", otherwise you won&#8217;t be able to see it.</p>
-</div>
-<div class="paragraph">
-<p>FIXME: The current implementation probably requires all route target components to have initial state, and probably gives a lousy error if they don&#8217;t. This is because the defrouter macro is assuming it is always there, and is issuing a call to get it for every child.</p>
+<p>If you are doing SSR, then you will need to simulate calling <code>change-route</code> there.  The function
+<code>dr/ssr-initial-state</code> (written, but untested) can be used to help you construct the proper state for a given path (which must be used
+for the server-side render, and also as the initial state for the client). Technically, this means that the
+function can also be used to generate initial state for the client on the front-end as well.</p>
 </div>
 <div class="sect2">
 <h3 id="_route_segments_and_changing_routes"><a class="anchor" href="#_route_segments_and_changing_routes"></a><a class="link" href="#_route_segments_and_changing_routes">3.1. Route Segments and Changing Routes</a></h3>
@@ -853,7 +866,8 @@ for a later "continue" operation (e.g. "Are You Sure?", "Yes").</p>
 <p>Of course you should not do immediate routing if the ident you&#8217;re returning does not point to something that already exists in the database.  Perhaps you need to load it.</p>
 </div>
 <div class="paragraph">
-<p>Pending routes can be completed by calling the <code>dr/target-ready</code> mutation with a <code>target</code> parameter that matches the <code>ident</code> you passed with <code>route-deferred</code>.  For example, say you wanted to load a user before routing to them:</p>
+<p>Pending routes can be completed by calling the <code>dr/target-ready</code> mutation with a <code>target</code> parameter that matches the
+<code>ident</code> you passed with <code>route-deferred</code>.  For example, say you wanted to load a user before routing to them:</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -873,7 +887,8 @@ for a later "continue" operation (e.g. "Are You Sure?", "Yes").</p>
 </div>
 </div>
 <div class="paragraph">
-<p>Note that the route parameters come in via a map keyed by the keyword in your <code>route-segment</code>. Remember that the value of these elements is guaranteed to be a string, so be sure you coerce them if you need them to be a different type.</p>
+<p>Note that the route parameters come in via a map keyed by the keyword in your <code>route-segment</code>. Remember that the value
+of these elements is guaranteed to be a string, so be sure you coerce them if you need them to be a different type.</p>
 </div>
 <div class="admonitionblock important">
 <table>
@@ -888,7 +903,32 @@ The <code>will-enter</code> method <strong>MUST</strong> return the value of a c
 </table>
 </div>
 <div class="sect3">
-<h4 id="_deferred_ui"><a class="anchor" href="#_deferred_ui"></a><a class="link" href="#_deferred_ui">3.3.1. Deferred UI</a></h4>
+<h4 id="_target_ready_within_mutations"><a class="anchor" href="#_target_ready_within_mutations"></a><a class="link" href="#_target_ready_within_mutations">3.3.1. Target Ready within Mutations</a></h4>
+<div class="paragraph">
+<p>The mutation <code>target-ready</code> is meant for use with loads as a post-mutation.  The assumption is that there will be
+some natural delay before it is called.  The routers use UI state machines internally, whose event triggering works
+on a delay so they can be used in mutations.  Unfortunately, this make it impossible to write a simple mutation
+helper.</p>
+</div>
+<div class="paragraph">
+<p>If you need to signal that a target is ready from within a mutation, please use the following (non-standard) pattern
+instead:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="CodeRay highlight"><code data-lang="clojure">(defmutation do-stuff-and-finish-routing [params]
+  (action [{<span class="symbol">:keys</span> [reconciler]}]
+    (js/console.log <span class="string"><span class="delimiter">&quot;</span><span class="content">Pretending to do stuff to app state before finishing the route</span><span class="delimiter">&quot;</span></span>)
+    (dr/target-ready! reconciler ident-of-target)))</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>earlier versions had a mutation helper, but that is insufficient in this case and that helper was useless (and
+it was removed).</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_router_rendering_of_a_deferred_ui"><a class="anchor" href="#_router_rendering_of_a_deferred_ui"></a><a class="link" href="#_router_rendering_of_a_deferred_ui">3.3.2. Router Rendering of a Deferred UI</a></h4>
 <div class="paragraph">
 <p>The router uses a state machine internally and sets two timeouts with respect to deferred routes: and <code>:error-timeout</code>, and a
 <code>:deferred-timeout</code> (which can be sent with your calls to <code>change-route</code>).  The error timeout is how long a route can be
@@ -1011,9 +1051,13 @@ the keyword name of the router:</p>
 </div>
 </div>
 <div class="sect3">
-<h4 id="_code_splitting"><a class="anchor" href="#_code_splitting"></a><a class="link" href="#_code_splitting">3.3.2. Code Splitting</a></h4>
+<h4 id="_code_splitting"><a class="anchor" href="#_code_splitting"></a><a class="link" href="#_code_splitting">3.3.3. Code Splitting</a></h4>
 <div class="paragraph">
-<p>The route defer mechanism should be sufficient to implement code splitting, where the routing target is the "join point" for the dynamic code.  Basically the component would not include the code-split child in the query or UI initially, but could trigger a code load and defer routing (storing the ident in a place where the loaded code could trigger the completion of the route, and a dynamic query change of the original component to point to the newly loaded component).</p>
+<p>The route defer mechanism should be sufficient to implement code splitting, where the routing target is the
+"join point" for the dynamic code.  Basically the component would not include the code-split child in the query or UI
+initially, but could trigger a code load and defer routing (storing the ident in a place where the loaded code could
+trigger the completion of the route, and a dynamic query change of the original component to point to the newly loaded
+component).</p>
 </div>
 <div class="paragraph">
 <p>Something like:</p>
@@ -1066,7 +1110,7 @@ the keyword name of the router:</p>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2019-02-13 14:01:29 -0800
+Last updated 2019-02-21 19:01:05 -0800
 </div>
 </div>
 </body>

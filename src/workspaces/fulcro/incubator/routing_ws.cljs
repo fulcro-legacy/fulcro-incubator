@@ -37,13 +37,19 @@
 
 (declare SettingsPaneRouter)
 
+(defmutation do-stuff-and-finish-routing [params]
+  (action [{:keys [reconciler]}]
+    (js/console.log "Pretending to do stuff to app state before finishing the route")
+    (dr/target-ready! reconciler [:COMPONENT/by-id :pane2])))
+
 (defsc-route-target Pane2 [this {:keys [:x] :as props}]
   {:query           [:x]
    :ident           (fn [] [:COMPONENT/by-id :pane2])
    :initial-state   {:x 1}
    :route-segment   (fn [] ["pane2"])
    :route-cancelled (fn [_])
-   :will-enter      (fn [_ _] (dr/route-immediate [:COMPONENT/by-id :pane2]))
+   :will-enter      (fn [reconciler _] (dr/route-deferred [:COMPONENT/by-id :pane2]
+                                         (fn [] (prim/transact! reconciler `[(do-stuff-and-finish-routing {})]))))
    :will-leave      (fn [_] (js/console.log "Leave pane2")
                       true)}
   (dom/div

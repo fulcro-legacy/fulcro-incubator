@@ -7,6 +7,7 @@
 NOTE: If you were accessing the router states in app state, you will need to update your router IDs.
 - Removed an annoying UISM warning about accessing non-started machines, since 
 that can happen in render very easily.
+- Routing: Added `target-ready!` for proper deferred resolution in mutations.
 
 0.0.28
 ------
