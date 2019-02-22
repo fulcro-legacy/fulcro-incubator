@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.30
+------
+- Proxy computed props through dynamic routers
+
 0.0.29
 ------
 - UISM: Added back debug logging. Requires Fulcro 2.8.3 (which fixed a logging bug)
