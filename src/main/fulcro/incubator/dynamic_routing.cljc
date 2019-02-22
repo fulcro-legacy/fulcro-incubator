@@ -487,7 +487,7 @@
                                                  (if (~states-to-render-route ~'current-state)
                                                    (when ~'class
                                                      (let [~'factory (prim/factory ~'class)]
-                                                       (~'factory ~'current-route)))
+                                                       (~'factory (prim/computed ~'current-route (prim/get-computed ~'this)))))
                                                    (let [~(first arglist) ~'this
                                                          ~(second arglist) {:pending-path-segment ~'pending-path-segment
                                                                             :route-props          ~'current-route
