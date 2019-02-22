@@ -10,8 +10,9 @@ or are intended to be forked into new projects in the future.
 
 == Can I Use Them in Production?
 
-We are following a strict usability plan with this library: we will refrain from making breaking changes/removal to
-anything within, but will instead generate new namespaces for variations. This may bloat this particular library a bit,
+We are following a maximal usability plan with this library: we will refrain from making breaking changes/removal to
+anything within, but will instead generate new namespaces for variations (we make make exceptions for tiny corrections
+that have minimal impact). This may bloat this particular library a bit,
 but will ensure you can safely use it in production environments.  Please let us know when you feel a feature
 is mature, and we'll consider accelerating promoting it to the main library or to its own smaller private project.
 

@@ -3,9 +3,10 @@
 0.0.29
 ------
 - UISM: Added back debug logging. Requires Fulcro 2.8.3 (which fixed a logging bug)
-- Routing: Fixed SSR helper bug
-- Routing: Added `initialize!` which will prevent warnings on app state for unvisited routes.
-
+- Routing: Fixed SSR helper bug, added some debug logging, and namespaced the router IDs.
+NOTE: If you were accessing the router states in app state, you will need to update your router IDs.
+- Removed an annoying UISM warning about accessing non-started machines, since 
+that can happen in render very easily.
 
 0.0.28
 ------

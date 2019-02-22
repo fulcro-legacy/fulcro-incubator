@@ -102,7 +102,7 @@
     :failed (dom/div
               (dom/div "Ooops!")
               (dom/button {:onClick #(dr/change-route this ["settings"])} "Go to settings"))
-    (dom/div "...")))
+    (dom/div "No route selected.")))
 
 (def ui-root-router-2 (prim/factory RootRouter2))
 
@@ -132,5 +132,8 @@
      ::f.portal/wrap-root? false
      ::f.portal/app        {:started-callback (fn [{:keys [reconciler] :as app}]
                                                 (reset! fulcro-app app)
-                                                (dr/change-route reconciler ["settings"]))
+                                                ;; simulate what it will look like on the first frame
+                                                (js/setTimeout
+                                                  #(dr/change-route reconciler ["settings"])
+                                                  2000))
                             :networking       (server/new-server-emulator (server/fulcro-parser) 2000)}}))
