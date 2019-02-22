@@ -1,6 +1,7 @@
 (ns fulcro.incubator.spec-helpers-test
   (:require
-    [clojure.test :as t :refer [deftest testing is]]
+    [nubank.workspaces.core :refer [deftest]]
+    [clojure.test :as t :refer [testing is]]
     [fulcro.incubator.spec-helpers :as g :refer [=> | <- >defn >defn- >fdef ?]]))
 
 (deftest generates-the-correct-spec-and-public-function

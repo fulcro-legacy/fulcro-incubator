@@ -1,5 +1,14 @@
 # Change Log
 
+0.0.29
+------
+- UISM: Added back debug logging. Requires Fulcro 2.8.3 (which fixed a logging bug)
+- Routing: Fixed SSR helper bug, added some debug logging, and namespaced the router IDs.
+NOTE: If you were accessing the router states in app state, you will need to update your router IDs.
+- Removed an annoying UISM warning about accessing non-started machines, since 
+that can happen in render very easily.
+- Routing: Added `target-ready!` for proper deferred resolution in mutations.
+
 0.0.28
 ------
 - UISM: Added support for alias/actor targeting to load 

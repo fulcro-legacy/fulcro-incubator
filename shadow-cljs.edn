@@ -1,30 +1,26 @@
 ;; shadow-cljs configuration
-{:deps   {:aliases [:dev]}
- :nrepl  {:port 9845}
+{:deps     {:aliases [:dev]}
+ :nrepl    {:port 9845}
+ :dev-http {8000 ["classpath:public"]
+            8001 ["classpath:public/js/test"]}
 
- :builds {:workspaces {:target           nubank.workspaces.shadow-cljs.target
-                       :ns-regexp        "-ws$"
-                       :output-dir       "resources/public/js/workspaces"
-                       :asset-path       "/js/workspaces"
-                       :compiler-options {:closure-output-charset "US-ASCII"
-                                          :static-fns             false
-                                          :external-config        {:ghostwheel {}}}
-                       :devtools         {:preloads           [fulcro.inspect.preload]
-                                          :http-root          "resources/public"
-                                          :http-port          3689
-                                          :http-resource-root "."}}
+ :builds   {:workspaces {:target           nubank.workspaces.shadow-cljs.target
+                         :ns-regexp        "(-test|-ws)$"
+                         :output-dir       "resources/public/js/workspaces"
+                         :asset-path       "/js/workspaces"
+                         :compiler-options {:closure-output-charset "US-ASCII"
+                                            :static-fns             false
+                                            :external-config        {:ghostwheel {}}}
+                         :devtools         {:preloads [fulcro.inspect.preload]}}
 
-          :test       {:target           :browser-test
-                       :test-dir         "resources/public/js/test"
-                       :ns-regexp        "test$"
-                       :compiler-options {:static-fns      false
-                                          :external-config {:ghostwheel {}}}
-                       :devtools         {:http-port          8021
-                                          :http-resource-root "public"
-                                          :http-root          "resources/public/js/test"}}
+            :test       {:target           :browser-test
+                         :test-dir         "resources/public/js/test"
+                         :ns-regexp        "test$"
+                         :compiler-options {:static-fns      false
+                                            :external-config {:ghostwheel {}}}}
 
-          :ci         {:target           :karma
-                       :js-options       {:js-provider :shadow}
-                       :compiler-options {:static-fns false} ; required for mocking to work
-                       :output-to        "target/ci.js"
-                       :ns-regexp        "-test$"}}}
+            :ci         {:target           :karma
+                         :js-options       {:js-provider :shadow}
+                         :compiler-options {:static-fns false} ; required for mocking to work
+                         :output-to        "target/ci.js"
+                         :ns-regexp        "-test$"}}}

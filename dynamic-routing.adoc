@@ -1,7 +1,6 @@
 = Routing Features
 :author: Tony Kay
-:revdate: December 2, 2018
-:revnumber: 2
+:revdate: Feb. 12, 2019
 :lang: en
 :encoding: UTF-8
 :doctype: book
@@ -142,7 +141,11 @@ Most of the novelty about routes can now be encoded into normal components with 
 `route-cancelled`:: A notification that this route target was in a deferred state but the user made some other routing decision during that delay. This can be used to cancel heavy I/O operations for this target.
 `will-leave`:: A method that can prevent a route change that causes this component to leave the screen. This is called on the instance, so `this` and `props` are available. A request to change routes will signal this method from deepest child towards the parent, and will stop if any returns false.
 
-WARNING: `will-enter` MUST NOT side-effect, but must instead do any I/O in the lambda passed to `route-deferred`. It must also trigger the `dr/target-ready` mutation to indicate that the route is ready.
+WARNING: `will-enter` SHOULD NOT side-effect (order of operations could cause strange behavior), but must instead do
+any I/O in the lambda passed to `route-deferred`.
+It must also trigger the `dr/target-ready` mutation to indicate that the route is ready. You can use plain `transact!`
+to start a mutation with route-deferred, but the mutation must use `target-ready!` to send the signal (since you're already in a mutation
+at that point).
 
 Route targets can be singletons or regular components that have multiple instances.  In the latter case you must be sure that the ident returned from `will-enter` points to valid data in state by the time the route is resolved.
 
@@ -152,16 +155,25 @@ NOTE: There is a complete working demo in https://github.com/fulcrologic/fulcro-
 
 The dynamic routing relies on a call to `change-route` in order to start the routing system.  Therefore you MUST make
 a call to `change-route` on start in order for the dynamic routers to work; however, there is also the concern of what
-gets rendered on the "first frame" of application mount.  Thus, you want there to technically be a "default route"
-in app state as well.
+gets rendered on the "first frame" of application mount.
 
-The composition of routers in your UI will result in some overall route that is the "default" at application start
-(as far as initial application state is concerned).
-This is simply the first element of each `defrouter` that is reachable from your root.
+Your top-most router will be in an "uninitialized" state on initial load. You can use the body of that router to
+render the "first frame" of your mounted app:
 
-The "default" target on a route that is visible at application load MUST have initial state that gives the router something in state to "route to", otherwise you won't be able to see it.
+```
+(defrouter RootRouter2 [this props]
+  {:router-targets     [Settings User]}
+  (case current-state
+    :pending (dom/div "Loading...")
+    :failed (dom/div "Failed!")
+    ;; default will be used when the current state isn't yet set
+    (dom/div "No route selected.")))
+```
 
-FIXME: The current implementation probably requires all route target components to have initial state, and probably gives a lousy error if they don't. This is because the defrouter macro is assuming it is always there, and is issuing a call to get it for every child.
+If you are doing SSR, then you will need to simulate calling `change-route` there.  The function
+`dr/ssr-initial-state` (written, but untested) can be used to help you construct the proper state for a given path (which must be used
+for the server-side render, and also as the initial state for the client). Technically, this means that the
+function can also be used to generate initial state for the client on the front-end as well.
 
 == Route Segments and Changing Routes
 
@@ -222,7 +234,8 @@ There are times when you want to delay a route change based on some I/O operatio
 
 Of course you should not do immediate routing if the ident you're returning does not point to something that already exists in the database.  Perhaps you need to load it.
 
-Pending routes can be completed by calling the `dr/target-ready` mutation with a `target` parameter that matches the `ident` you passed with `route-deferred`.  For example, say you wanted to load a user before routing to them:
+Pending routes can be completed by calling the `dr/target-ready` mutation with a `target` parameter that matches the
+`ident` you passed with `route-deferred`.  For example, say you wanted to load a user before routing to them:
 
 ```
 (defsc User [this props]
@@ -240,11 +253,32 @@ Pending routes can be completed by calling the `dr/target-ready` mutation with a
   (dom/div ...))
 ```
 
-Note that the route parameters come in via a map keyed by the keyword in your `route-segment`. Remember that the value of these elements is guaranteed to be a string, so be sure you coerce them if you need them to be a different type.
+Note that the route parameters come in via a map keyed by the keyword in your `route-segment`. Remember that the value
+of these elements is guaranteed to be a string, so be sure you coerce them if you need them to be a different type.
 
 IMPORTANT: The `will-enter` method *MUST* return the value of a call to either `route-immediate` or `route-deferred`.
 
-=== Deferred UI
+=== Target Ready within Mutations
+
+The mutation `target-ready` is meant for use with loads as a post-mutation.  The assumption is that there will be
+some natural delay before it is called.  The routers use UI state machines internally, whose event triggering works
+on a delay so they can be used in mutations.  Unfortunately, this make it impossible to write a simple mutation
+helper.
+
+If you need to signal that a target is ready from within a mutation, please use the following (non-standard) pattern
+instead:
+
+```
+(defmutation do-stuff-and-finish-routing [params]
+  (action [{:keys [reconciler]}]
+    (js/console.log "Pretending to do stuff to app state before finishing the route")
+    (dr/target-ready! reconciler ident-of-target)))
+```
+
+earlier versions had a mutation helper, but that is insufficient in this case and that helper was useless (and
+it was removed).
+
+=== Router Rendering of a Deferred UI
 
 The router uses a state machine internally and sets two timeouts with respect to deferred routes: and `:error-timeout`, and a
 `:deferred-timeout` (which can be sent with your calls to `change-route`).  The error timeout is how long a route can be
@@ -315,7 +349,11 @@ the keyword name of the router:
 
 === Code Splitting
 
-The route defer mechanism should be sufficient to implement code splitting, where the routing target is the "join point" for the dynamic code.  Basically the component would not include the code-split child in the query or UI initially, but could trigger a code load and defer routing (storing the ident in a place where the loaded code could trigger the completion of the route, and a dynamic query change of the original component to point to the newly loaded component).
+The route defer mechanism should be sufficient to implement code splitting, where the routing target is the
+"join point" for the dynamic code.  Basically the component would not include the code-split child in the query or UI
+initially, but could trigger a code load and defer routing (storing the ident in a place where the loaded code could
+trigger the completion of the route, and a dynamic query change of the original component to point to the newly loaded
+component).
 
 Something like:
 
