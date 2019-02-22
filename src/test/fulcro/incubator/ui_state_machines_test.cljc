@@ -259,7 +259,7 @@
                    :append :uberwidgets)]
         (select-keys (get-in nenv [::uism/state-map :TABLE 1]) #{:other-widgets :linked-widgets}))
       => {:linked-widgets [[:widget/by-id 2] [:widget/by-id 1]]
-          :other-widgets [[:widget/by-id 2]]}
+          :other-widgets  [[:widget/by-id 2]]}
       "Can prepend an ident"
       (-> env
         (uism/integrate-ident [:widget/by-id 2] :prepend :widgets)
@@ -792,7 +792,7 @@
       (assertions
         "(normal target)"
         (uism/compute-target test-env {::pm/target [:a 1]}) => [:a 1]
-        "(speecial target)"
+        "(special target)"
         (uism/compute-target test-env {::pm/target (df/append-to [:a 1])}) => [:a 1]
         (dft/special-target? (uism/compute-target test-env {::pm/target (df/append-to [:a 1])})) => true))
     (behavior "Resolves actors"

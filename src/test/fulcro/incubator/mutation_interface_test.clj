@@ -1,6 +1,6 @@
 (ns fulcro.incubator.mutation-interface-test
   (:require [clojure.spec.alpha :as s]
-            [clojure.test :refer :all]
+            [nubank.workspaces.core :refer [deftest]]
             [fulcro-spec.core :refer [assertions]]
             [fulcro.incubator.mutation-interface :as mi :refer [declare-mutation]]))
 

@@ -7,6 +7,7 @@
     [fulcro.server-render :as ssr]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.mutations :refer [defmutation]]
+    [fulcro.logging :as log]
     [clojure.spec.alpha :as s]
     #?(:clj [cljs.analyzer :as ana])
     [fulcro.util :as futil]))
@@ -84,6 +85,7 @@
   (let [router-class (-> router meta :component)
         router-id    (second router)
         target-class (-> target meta :component)]
+    (log/debug "Applying route ident" target "to router" router-id)
     (-> state-map
       (assoc-in (conj router ::current-route) target)
       (update-in router dissoc ::pending-route)
@@ -109,6 +111,7 @@
 (defmutation target-ready [{:keys [target]}]
   (action [{:keys [reconciler state]}]
     (when-let [router-id (router-for-pending-target @state target)]
+      (log/debug "Router" router-id "notified that pending route is ready.")
       (uism/trigger! reconciler router-id :ready!)))
   (refresh [_] [:route]))
 
@@ -347,7 +350,7 @@
   ([this-or-reconciler relative-class-or-instance new-route]
    (change-route-relative this-or-reconciler relative-class-or-instance new-route {}))
   ([this-or-reconciler relative-class-or-instance new-route timeouts]
-   (if-let [ok? (signal-router-leaving this-or-reconciler relative-class-or-instance new-route)]
+   (if (signal-router-leaving this-or-reconciler relative-class-or-instance new-route)
      (uism/defer
        #(let [reconciler (if (prim/reconciler? this-or-reconciler) this-or-reconciler (prim/get-reconciler this-or-reconciler))
               state-map  (-> reconciler prim/app-state deref)
@@ -383,7 +386,8 @@
                     event-data)
                   (uism/trigger! reconciler router-id :route! event-data))
                 (when (seq remaining-path)
-                  (recur (ast-node-for-route target-ast remaining-path) remaining-path))))))))))
+                  (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))))
+     (log/debug "Route request cancelled by on-screen target."))))
 
 (defn change-route
   "Trigger a route change.
@@ -437,7 +441,7 @@
 #?(:clj (s/def ::defrouter-options (s/keys :req-un [::router-targets] :opt-un [::initial-ui ::loading-ui ::failed-ui])))
 
 #?(:clj
-   (defn defrouter* [env router-sym arglist options body]
+   (defn defrouter* [env router-ns router-sym arglist options body]
      (when-not (and (vector? arglist) (= 2 (count arglist)))
        (compile-error env options "defrouter argument list must have an entry for this and props."))
      (when-not (map? options)
@@ -445,7 +449,7 @@
      (when-not (s/valid? ::defrouter-options options)
        (compile-error env options (str "defrouter options are invalid: " (s/explain-str ::defrouter-options options))))
      (let [{:keys [router-targets]} options
-           id                     (-> router-sym name keyword)
+           id                     (keyword router-ns (name router-sym))
            query                  (into [::id
                                          [::uism/asm-id id]
                                          {::current-route `(prim/get-query ~(first router-targets))}]
@@ -508,7 +512,7 @@
      otherwise the actual active route target will be rendered.
      "
      [router-sym arglist options & body]
-     (defrouter* &env router-sym arglist options body)))
+     (defrouter* &env (str (ns-name *ns*)) router-sym arglist options body)))
 
 #?(:clj
    (s/fdef defrouter
@@ -550,7 +554,39 @@
                                                  :target       (vary-meta target-ident assoc
                                                                  :component target)})
                       ::uism/actor->ident     {:router (uism/with-actor-class router-ident root-router-class)}}
-        initial-db   (assoc-in initial-db [::uism/asm-id :RootRouter] (uism/new-asm params))]
+        initial-db   (assoc-in initial-db [::uism/asm-id instance-id] (uism/new-asm params))]
     {:db    initial-db
      :props (prim/db->tree (prim/get-query app-root-class initial-db)
               initial-db initial-db)}))
+
+#_(defn all-reachable-routers
+  "Returns a sequence of all of the routers reachable in the query of the app."
+  [state-map component-class]
+  (let [root-query  (prim/get-query component-class state-map)
+        {:keys [children]} (prim/query->ast root-query)
+        get-routers (fn get-routers* [nodes]
+                      (reduce
+                        (fn [acc {:keys [component children]}]
+                          (into (if (router? component)
+                                  (conj acc component)
+                                  acc)
+                            (get-routers* children)))
+                        []
+                        nodes))]
+    (get-routers children)))
+
+#_(defn initialize!
+  "Initialize the routing system.  This ensures that all routers have state machines in app state."
+  [reconciler]
+  (let [state-map (-> reconciler prim/app-state deref)
+        root      (prim/app-root reconciler)
+        routers   (all-reachable-routers state-map root)
+        tx        (mapv (fn [r]
+                          (let [router-ident (prim/get-ident r {})
+                                router-id    (second router-ident)]
+                            (uism/begin {::uism/asm-id           router-id
+                                         ::uism/state-machine-id (::uism/state-machine-id RouterStateMachine)
+                                         ::uism/event-data       {:path-segment []
+                                                                  :router       (vary-meta router-ident assoc :component r)}
+                                         ::uism/actor->ident     {:router (uism/with-actor-class router-ident r)}}))) routers)]
+    (prim/transact! reconciler tx)))

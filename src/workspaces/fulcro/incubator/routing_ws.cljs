@@ -15,7 +15,11 @@
     [fulcro.client.mutations :as m]
     [fulcro.client.data-fetch :as df]
     [fulcro.incubator.dynamic-routing :as dr]
-    [fulcro.client :as fc]))
+    [fulcro.client :as fc]
+    [fulcro.logging :as log]))
+
+;; so we can see UI state machine debug messages
+(log/set-level! :debug)
 
 (defonce fulcro-app (atom nil))
 
@@ -71,8 +75,7 @@
    :route-cancelled (fn [params]
                       ;; js network mock doesn't support cancel, but this is how you'd do it:
                       (when @fulcro-app
-                        (fc/abort-request! @fulcro-app :user-load))
-                      (js/console.log :user-route-cancelled params))
+                        (fc/abort-request! @fulcro-app :user-load)))
    :will-enter      (fn [reconciler {:keys [user-id]}]
                       (when-let [user-id (some-> user-id (js/parseInt))]
                         (dr/route-deferred [:user/id user-id]
@@ -86,15 +89,13 @@
 (defrouter RootRouter2 [this {:keys [current-state pending-path-segment route-factory route-props]}]
   {:router-targets     [Settings User]
    :componentDidUpdate (fn [pp ps]
-                         (let [current-state        (uism/get-active-state this :RootRouter2)
+                         (let [current-state        (uism/get-active-state this ::RootRouter2)
                                sm-env               (uism/state-machine-env (prim/component->state-map this)
-                                                      nil :RootRouter2 :noop {})
+                                                      nil ::RootRouter2 :noop {})
                                pending-path-segment (uism/retrieve sm-env :pending-path-segment)
                                current-path         (uism/retrieve sm-env :path-segment)]
                            (js/console.log :rr2-updated current-state :pending-path pending-path-segment
                              :current-path current-path)))}
-  (js/console.log :route-factory (meta route-factory))
-  (js/console.log :route-props route-props)
   (case current-state
     :pending (dom/div "Loading a user..."
                (dom/button {:onClick #(dr/change-route this ["settings" "pane2"])} "cancel"))
@@ -131,5 +132,5 @@
      ::f.portal/wrap-root? false
      ::f.portal/app        {:started-callback (fn [{:keys [reconciler] :as app}]
                                                 (reset! fulcro-app app)
-                                                (dr/change-route reconciler ["settings" "pane1"]))
+                                                (dr/change-route reconciler ["settings"]))
                             :networking       (server/new-server-emulator (server/fulcro-parser) 2000)}}))

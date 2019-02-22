@@ -1,5 +1,12 @@
 # Change Log
 
+0.0.29
+------
+- UISM: Added back debug logging. Requires Fulcro 2.8.3 (which fixed a logging bug)
+- Routing: Fixed SSR helper bug
+- Routing: Added `initialize!` which will prevent warnings on app state for unvisited routes.
+
+
 0.0.28
 ------
 - UISM: Added support for alias/actor targeting to load 

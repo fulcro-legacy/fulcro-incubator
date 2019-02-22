@@ -1,6 +1,6 @@
 (ns fulcro.incubator.dynamic-routing-test
   (:require
-    [clojure.test :refer [deftest]]
+    [nubank.workspaces.core :refer [deftest]]
     [fulcro.client.primitives :as prim :refer [defsc]]
     [fulcro.client.data-fetch :as df]
     [fulcro-spec.core :refer [assertions]]
