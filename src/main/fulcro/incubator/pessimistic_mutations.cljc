@@ -26,12 +26,12 @@
 
 (defn- get-params-mutation-response-key [ast]
   (or (-> ast :params ::mutation-response-key)
-      (-> ast :params :params ::mutation-response-key)
-      ::mutation-response))
+    (-> ast :params :params ::mutation-response-key)
+    ::mutation-response))
 
 (defn- get-params-mutation-returning [ast]
   (or (-> ast :params ::returning)
-      (-> ast :params :params ::returning)))
+    (-> ast :params :params ::returning)))
 
 (defn- mutation-response-swap-keyword [mutation-response-key]
   (let [mutation-swap-str (some-> mutation-response-key
@@ -149,9 +149,9 @@
   [{:keys  [error params]
     ::keys [ref] :as p}]
   (action [env]
-    (let [low-level-error (some-> error first second :fulcro.client.primitives/error)
+    (let [low-level-error            (some-> error first second :fulcro.client.primitives/error)
           {::keys [key]} params
-          mutation-response-key (get-mutation-response-key params)
+          mutation-response-key      (get-mutation-response-key params)
           mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)]
       (db.h/swap-entity! (assoc env :ref ref) assoc mutation-response-swap-key
         (cond-> (dissoc p ::ref :error :params)
@@ -164,8 +164,8 @@
   "INTERNAL USE mutation."
   [{::keys [key target] :as params}]
   (action [{:keys [state] :as env}]
-    (let [loading-marker {::status :loading
-                          ::key    key}
+    (let [loading-marker        {::status :loading
+                                 ::key    key}
           mutation-response-key (get-mutation-response-key params)]
       (db.h/swap-entity! env assoc mutation-response-key {::status :loading
                                                           ::key    key})
@@ -179,13 +179,17 @@
   (action [env]
     (let [{:keys [state ref reconciler]} env
           {::keys [key target returning]} params
-          mutation-response-key (get-mutation-response-key params)
+          mutation-response-key      (get-mutation-response-key params)
           mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)
-          mutation-response-swap (get-in @state (conj ref mutation-response-swap-key))
+          mutation-response-swap     (let [data (get-in @state (conj ref mutation-response-swap-key))]
+                                       (if (prim/component-class? returning)
+                                         (prim/db->tree (prim/get-query returning) data @state)
+                                         data))
           {::keys [status]} mutation-response-swap
-          hard-error? (= status :hard-error)
-          api-error?  (contains? mutation-response-swap ::mutation-errors)
-          had-error?  (or hard-error? api-error?)]
+          hard-error?                (= status :hard-error)
+          api-error?                 (contains? mutation-response-swap ::mutation-errors)
+          had-error?                 (or hard-error? api-error?)]
+      (log/info mutation-response-swap)
       (if had-error?
         (do
           (db.h/swap-entity! env assoc mutation-response-key (merge {::status :api-error} mutation-response-swap {::key key}))
