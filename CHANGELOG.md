@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.31
+------
+- Fixed bug in pessimistic mutation return value handling
+
 0.0.30
 ------
 - Proxy computed props through dynamic routers
