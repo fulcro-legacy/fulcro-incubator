@@ -189,7 +189,6 @@
           hard-error?                (= status :hard-error)
           api-error?                 (contains? mutation-response-swap ::mutation-errors)
           had-error?                 (or hard-error? api-error?)]
-      (log/info mutation-response-swap)
       (if had-error?
         (do
           (db.h/swap-entity! env assoc mutation-response-key (merge {::status :api-error} mutation-response-swap {::key key}))
