@@ -1,4 +1,4 @@
-(defproject fulcrologic/fulcro-incubator "0.0.30"
+(defproject fulcrologic/fulcro-incubator "0.0.31"
   :description "Tools for Fulcro apps"
   :url "https://github.com/fulcrologic/fulcro-incubator"
   :license {:name "MIT" :url "https://opensource.org/licenses/MIT"}
