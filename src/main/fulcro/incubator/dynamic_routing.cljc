@@ -561,15 +561,16 @@
         instance-id  (second router-ident)
         {:keys [target matching-prefix]} (route-target root-router-class route-path)
         target-ident (will-enter+ target nil nil)           ; Target in this example needs neither
-        params       {::uism/asm-id           instance-id
-                      ::uism/state-machine-id (::state-machine-id RouterStateMachine)
-                      ::uism/event-data       (merge
-                                                {:path-segment matching-prefix
-                                                 :router       (vary-meta router-ident assoc
-                                                                 :component root-router-class)
-                                                 :target       (vary-meta target-ident assoc
-                                                                 :component target)})
-                      ::uism/actor->ident     {:router (uism/with-actor-class router-ident root-router-class)}}
+        params       {::uism/asm-id                instance-id
+                      ::uism/state-machine-id      (::state-machine-id RouterStateMachine)
+                      ::uism/event-data            (merge
+                                                     {:path-segment matching-prefix
+                                                      :router       (vary-meta router-ident assoc
+                                                                      :component root-router-class)
+                                                      :target       (vary-meta target-ident assoc
+                                                                      :component target)})
+                      ::uism/actor->component-name {:router (uism/any->actor-component-registry-key root-router-class)}
+                      ::uism/actor->ident          {:router router-ident}}
         initial-db   (assoc-in initial-db [::uism/asm-id instance-id] (uism/new-asm params))]
     {:db    initial-db
      :props (prim/db->tree (prim/get-query app-root-class initial-db)

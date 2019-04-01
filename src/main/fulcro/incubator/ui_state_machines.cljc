@@ -4,6 +4,7 @@
   (:require
     [clojure.set :as set]
     [clojure.spec.alpha :as s]
+    [clojure.string :as str]
     [ghostwheel.core :as gw :refer [>fdef => | ? <-]]
     [fulcro.logging :as log]
     [fulcro.client.data-fetch :as df]
@@ -45,6 +46,7 @@
 (s/def ::fulcro-reconciler (s/with-gen prim/reconciler? #(s/gen #{(prim/reconciler {})})))
 (s/def ::source-actor-ident ::fulcro-ident)
 (s/def ::actor-name keyword?)
+(s/def ::actor->component-name (s/map-of ::actor-name keyword?))
 (s/def ::actor->ident (s/map-of ::actor-name ::fulcro-ident))
 (s/def ::ident->actor (s/map-of ::fulcro-ident ::actor-name))
 (s/def ::active-state keyword?)                             ; The state the active instance is currently in
@@ -60,7 +62,7 @@
 (s/def ::timeout-descriptor (s/keys :req [::js-timer ::timeout ::event-id ::timer-id ::cancel-on] :opt [::event-data]))
 (s/def ::queued-timeouts (s/coll-of ::timeout-descriptor))
 (s/def ::active-timers (s/map-of ::timer-id ::timeout-descriptor))
-(s/def ::asm (s/keys :req [::asm-id ::state-machine-id ::active-state ::actor->ident
+(s/def ::asm (s/keys :req [::asm-id ::state-machine-id ::active-state ::actor->ident ::actor->component-name
                            ::ident->actor ::active-timers ::local-storage]))
 (s/def ::state-id keyword?)
 (s/def ::event-data map?)
@@ -149,15 +151,16 @@
 
   Returns an active state machine that can be stored in Fulcro state for a specific
   state machine definition."
-  [{::keys [state-machine-id asm-id actor->ident]}]
+  [{::keys [state-machine-id asm-id actor->ident actor->component-name]}]
   (let [i->a (set/map-invert actor->ident)]
-    {::asm-id           asm-id
-     ::state-machine-id state-machine-id
-     ::active-state     :initial
-     ::ident->actor     i->a
-     ::actor->ident     actor->ident
-     ::active-timers    {}
-     ::local-storage    {}}))
+    {::asm-id                asm-id
+     ::state-machine-id      state-machine-id
+     ::active-state          :initial
+     ::ident->actor          i->a
+     ::actor->ident          actor->ident
+     ::actor->component-name (or actor->component-name {})
+     ::active-timers         {}
+     ::local-storage         {}}))
 (>fdef new-asm [options]
   [(s/keys :req [::state-machine-id ::asm-id ::actor->ident]) => ::asm])
 
@@ -373,9 +376,32 @@
 (>fdef with-actor-class [ident class]
   [::fulcro-ident ::prim/component-class => ::fulcro-ident])
 
-(defn actor-class [env actor-name]
-  (let [actor->ident (asm-value env ::actor->ident)
-        cls          (-> actor-name actor->ident meta ::class)]
+(defn any->actor-component-registry-key
+  "Convert one of the possible inputs for an actor into an actor component registry key.
+
+  v can be an ident with actor metadata (see `with-actor-class`), a Fulcro runtime instance whose `get-ident` returns
+  a valid ident, or a Fulcro component class with a singleton ident.
+
+  Returns the Fulcro component registry key (a keyword) that will be able to find the real Fulcro
+  component for `v`."
+  [v]
+  (when-let [cls (cond
+                   (and (futil/ident? v) (prim/component-class? (some-> v meta ::class))) (some-> v meta ::class)
+                   (and (prim/component? v) (-> (prim/get-ident v) second)) (prim/react-type v)
+                   (and (prim/component-class? v) (-> (prim/get-ident v {}) second)) v
+                   :otherwise nil)]
+    (let [str-name (prim/component-name cls)
+          [ns nm] (str/split str-name #"/")
+          k        (keyword ns nm)]
+      k)))
+(>fdef any->actor-component-registry-key [v]
+  [any? => (s/nilable keyword?)])
+
+(defn actor-class
+  "Returns the Fulcro component class that for the given actor, if set."
+  [env actor-name]
+  (let [actor->component-name (asm-value env ::actor->component-name)
+        cls                   (some-> actor-name actor->component-name prim/classname->class)]
     cls))
 (>fdef actor-class [env actor-name]
   [::env ::actor-name => (s/nilable ::prim/component-class)])
@@ -383,20 +409,23 @@
 (defn reset-actor-ident
   "Safely changes the ident of an actor.
 
-  Makes sure ident is consistently reset and includes necessary class metadata."
+  Makes sure ident is consistently reset and updates the actor class (if one is specified
+  using `with-actor-class`)."
   [env actor ident]
-  (let [class             (actor-class env actor)
-        ident             (with-actor-class ident class)
-        actor->ident      (-> env
-                            (asm-value ::actor->ident)
-                            (assoc actor ident))
-        ident->actor      (clojure.set/map-invert actor->ident)
+  (let [new-actor             (any->actor-component-registry-key ident)
+        actor->ident          (-> env
+                                (asm-value ::actor->ident)
+                                (assoc actor ident))
+        ident->actor          (clojure.set/map-invert actor->ident)
 
-        actor->ident-path (asm-path env ::actor->ident)
-        ident->actor-path (asm-path env ::ident->actor)]
+        actor->ident-path     (asm-path env ::actor->ident)
+        actor->component-path (conj (asm-path env ::actor->component-name) actor)
+        ident->actor-path     (asm-path env ::ident->actor)]
     (-> env
       (assoc-in actor->ident-path actor->ident)
-      (assoc-in ident->actor-path ident->actor))))
+      (assoc-in ident->actor-path ident->actor)
+      (cond->
+        new-actor (assoc-in actor->component-path new-actor)))))
 (>fdef reset-actor-ident [env actor ident]
   [::env ::alias ::fulcro-ident => ::env])
 
@@ -842,17 +871,17 @@
 (mi/declare-mutation begin `begin)
 
 (defn derive-actor-idents
-  "Generate an actor->ident map where the class of the actor is stored as metadata on each ident."
+  "Generate an actor->ident map."
   [actors]
   (into {}
     ;; v can be an ident, component, or component class
     (keep (fn [[actor-id v]]
             (cond
               (and (prim/component? v) (-> (prim/get-ident v) second))
-              [actor-id (with-actor-class (prim/get-ident v) (prim/react-type v))]
+              [actor-id (prim/get-ident v)]
 
               (and (prim/component-class? v) (-> (prim/get-ident v {}) second))
-              [actor-id (with-actor-class (prim/get-ident v {}) v)]
+              [actor-id (prim/get-ident v {})]
 
               (futil/ident? v) [actor-id v]
               :otherwise (do
@@ -863,6 +892,22 @@
                                                               :ident ::fulcro-ident
                                                               :component prim/component?
                                                               :class prim/component-class?)) => ::actor->ident])
+
+
+
+(defn derive-actor-components
+  "Calculate the map from actor names to the Fulcro component registry names that represent those actors."
+  [actors]
+  (into {}
+    ;; v can be an ident, component, or component class
+    (keep (fn [[actor-id v]]
+            (when-let [k (any->actor-component-registry-key v)]
+              [actor-id k])))
+    actors))
+(>fdef derive-actor-components [actors] [(s/map-of ::actor-name (s/or
+                                                                  :ident ::fulcro-ident
+                                                                  :component prim/component?
+                                                                  :class prim/component-class?)) => ::actor->component-name])
 
 (defn begin!
   "Install and start a state machine.
@@ -875,17 +920,19 @@
   ([this machine instance-id actors]
    (begin! this machine instance-id actors {}))
   ([this machine instance-id actors started-event-data]
-   (let [actors->idents (derive-actor-idents actors)]
+   (let [actors->idents          (derive-actor-idents actors)
+         actors->component-names (derive-actor-components actors)]
      (log/debug "begin!" instance-id)
-     (prim/transact! this [(begin {::asm-id           instance-id
-                                   ::state-machine-id (::state-machine-id machine)
-                                   ::event-data       started-event-data
-                                   ::actor->ident     actors->idents})]))))
+     (prim/transact! this [(begin {::asm-id                instance-id
+                                   ::state-machine-id      (::state-machine-id machine)
+                                   ::event-data            started-event-data
+                                   ::actor->component-name actors->component-names
+                                   ::actor->ident          actors->idents})]))))
 (>fdef begin!
   ([this machine instance-id actors]
-   [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident => any?])
+   [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id (s/map-of ::actor-name any?) => any?])
   ([this machine instance-id actors started-event-data]
-   [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id ::actor->ident ::event-data => any?]))
+   [(s/or :c ::prim/component :r ::fulcro-reconciler) ::state-machine-definition ::asm-id (s/map-of ::actor-name any?) ::event-data => any?]))
 
 #?(:clj
    (defmacro defstatemachine [name body]
