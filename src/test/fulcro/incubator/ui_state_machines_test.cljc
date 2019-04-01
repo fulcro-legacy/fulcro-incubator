@@ -55,9 +55,10 @@
                   2 {:id 2}
                   3 {:id 3}}
    ::uism/asm-id {:fake (uism/new-asm
-                          {::uism/state-machine-id `test-machine
-                           ::uism/asm-id           :fake
-                           ::uism/actor->ident     {:dialog (uism/with-actor-class [:TABLE 1] AClass)}})}})
+                          {::uism/state-machine-id      `test-machine
+                           ::uism/asm-id                :fake
+                           ::uism/actor->component-name {:dialog (uism/any->actor-component-registry-key AClass)}
+                           ::uism/actor->ident          {:dialog [:TABLE 1]}})}})
 (defn test-env [event-id event-data]
   (uism/state-machine-env base-fulcro-state [:TABLE 1] :fake event-id event-data))
 
@@ -116,6 +117,11 @@
       "Returns the Fulcro path to data in an actor if a field is included"
       (uism/actor-path env :dialog :boo) => [:TABLE 1 :boo]))
 
+  (specification "actor-class"
+    (assertions
+      "Returns the Fulcro class of an actor"
+      (uism/actor-class env :dialog) => AClass))
+
   (specification "set-actor-value"
     (assertions
       "Sets a raw (non-aliased) attribute in Fulcro state on an actor"
@@ -168,18 +174,14 @@
         :name) => "Sam"))
 
   (specification "reset-actor-ident"
-    (let [env               (uism/reset-actor-ident env :dialog [:TABLE 2])
-          actor->ident-path (uism/asm-path env ::actor->ident)
-          ident->actor-path (uism/asm-path env ::ident->actor)]
+    (let [env (uism/reset-actor-ident env :dialog [:TABLE 2])]
       (assertions
         "Can update actor/ident indexes"
         (uism/asm-value env ::uism/actor->ident) => {:dialog [:TABLE 2]}
         (uism/asm-value env ::uism/ident->actor) => {[:TABLE 2] :dialog}
-        "New indexes have class metadata"
-        (-> (uism/asm-value env ::uism/actor->ident)
-          :dialog meta) => {::uism/class AClass}
-        (-> (uism/asm-value env ::uism/ident->actor)
-          keys first meta) => {::uism/class AClass}))
+        "Class index is correct"
+        (uism/actor-class env :dialog) => AClass
+        (uism/asm-value env ::uism/actor->component-name) => {:dialog ::AClass}))
 
     (assertions
       "Returns unmodified env if the alias isn't valid"
@@ -655,6 +657,21 @@
 
          (uism/set-string! {} :fake :username #js {:target #js {:value "hi"}}))))
 
+  (specification "derive-actor-components"
+    (let [actual (uism/derive-actor-components {:a [:x 1]
+                                                :b AClass
+                                                :c (th/mock-component AClass {})
+                                                :d (uism/with-actor-class [:A 1] AClass)})]
+      (assertions
+        "allows a bare ident (no mapping)"
+        (:a actual) => nil
+        "accepts a singleton classes"
+        (:b actual) => ::AClass
+        ;; Need enzyme configured consistently for this test
+        "accepts a react instance"
+        (:c actual) => ::AClass
+        "finds class on metadata"
+        (:d actual) => ::AClass)))
   (specification "derive-actor-idents"
     (let [actual (uism/derive-actor-idents {:a [:x 1]
                                             :b AClass
@@ -667,13 +684,11 @@
         (:b actual) => [:A 1]
         "remembers the singleton class as metadata"
         (:b actual) => [:A 1]
-        (-> actual :b meta ::uism/class) => AClass
         ;; Need enzyme configured consistently for this test
         "remembers the class of a react instance"
         (:c actual) => [:A 1]
-        (-> actual :c meta ::uism/class) => AClass
-        "remembers an explicity 'with'"
-        (-> actual :d meta ::uism/class) => AClass)))
+        "records explicit idents that use with-actor-class"
+        (:d actual) => [:A 1])))
   (specification "set-timeout"
     (let [new-env    (uism/set-timeout env :timer/my-timer :event/bam! {} 100)
           descriptor (some-> new-env ::uism/queued-timeouts first)]
@@ -786,7 +801,8 @@
                            ::uism/actor-names #{:dialog}
                            ::uism/states      {:initial {::uism/handler (fn [env] env)}}})
 (specification "compute-target"
-  (let [asm      (uism/new-asm {::uism/state-machine-id `ctm ::uism/asm-id :fake ::uism/actor->ident {:dialog [:dialog 1]}})
+  (let [asm      (uism/new-asm {::uism/state-machine-id `ctm ::uism/asm-id :fake
+                                ::uism/actor->ident     {:dialog [:dialog 1]}})
         test-env (uism/state-machine-env {::uism/asm-id {:fake asm}} nil :fake :do {})]
     (behavior "accepts (and returns) any kind of raw fulcro target"
       (assertions

@@ -22,6 +22,8 @@ than having to write it from scratch, right?
 
 == State Machines
 
+NOTE: Version 0.0.32 REQUIRES Fulcro 2.8.8 or better.
+
 I've been wanting to add state machine stuff to Fulcro for some time.  I've finally done it, and I wish I'd done
 it years ago.  I've rewritten just a couple of things with it so far, and the results are so nice I can't wait
 to promote this thing out to Fulcro or its own library.

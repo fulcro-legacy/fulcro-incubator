@@ -1,5 +1,11 @@
 # Change Log
 
+0.0.32
+------
+- Changed state machines to track actor classes via Fulcro's new component
+registry. This fixes inspect's ability to "snapshot" state that uses state 
+machines.
+
 0.0.31
 ------
 - Fixed bug in pessimistic mutation return value handling
