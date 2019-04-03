@@ -177,7 +177,7 @@
       (reduce (fn [result target-class]
                 (let [prefix (and target-class (route-target? target-class)
                                (some-> target-class (route-segment+) (matching-prefix path)))]
-                  (if (seq prefix)
+                  (if (and prefix (seq prefix))
                     (reduced {:matching-prefix prefix
                               :target          target-class})
                     result))) nil targets))))
