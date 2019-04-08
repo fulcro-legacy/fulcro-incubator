@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.33
+------
+- Fixed bug in dynamic router that was causing deferred routes to fail
+to complete by giving state machine time to transition.
+
 0.0.32
 ------
 - Changed state machines to track actor classes via Fulcro's new component
