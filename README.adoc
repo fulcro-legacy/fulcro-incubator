@@ -1,5 +1,7 @@
 = Fulcro Incubator
 
+IMPORTANT: Version 0.0.32 REQUIRES Fulcro 2.8.8 or better.
+
 image:https://img.shields.io/clojars/v/fulcrologic/fulcro-incubator.svg[link=https://clojars.org/fulcrologic/fulcro-incubator]
 image:https://cljdoc.xyz/badge/fulcrologic/fulcro-incubator[link=https://cljdoc.xyz/d/fulcrologic/fulcro-incubator/CURRENT]
 image:https://circleci.com/gh/fulcrologic/fulcro-incubator/tree/master.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-incubator/tree/master"] (release)
@@ -21,8 +23,6 @@ it proves unpopular and you have to adopt some of it into your source base later
 than having to write it from scratch, right?
 
 == State Machines
-
-NOTE: Version 0.0.32 REQUIRES Fulcro 2.8.8 or better.
 
 I've been wanting to add state machine stuff to Fulcro for some time.  I've finally done it, and I wish I'd done
 it years ago.  I've rewritten just a couple of things with it so far, and the results are so nice I can't wait

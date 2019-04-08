@@ -177,7 +177,7 @@
       (reduce (fn [result target-class]
                 (let [prefix (and target-class (route-target? target-class)
                                (some-> target-class (route-segment+) (matching-prefix path)))]
-                  (if (seq prefix)
+                  (if (and prefix (seq prefix))
                     (reduced {:matching-prefix prefix
                               :target          target-class})
                     result))) nil targets))))
@@ -395,12 +395,12 @@
                                         {:path-segment matching-prefix
                                          :router       (vary-meta router-ident assoc :component component)
                                          :target       (vary-meta target-ident assoc :component target :params params)})]
-                (completing-action)
                 (if-not (uism/get-active-state reconciler router-id)
                   (uism/begin! this-or-reconciler RouterStateMachine router-id
                     {:router (uism/with-actor-class router-ident component)}
                     event-data)
                   (uism/trigger! reconciler router-id :route! event-data))
+                (uism/defer (fn [] (completing-action)))
                 (when (seq remaining-path)
                   (recur (ast-node-for-route target-ast remaining-path) remaining-path)))))))
      (log/debug "Route request cancelled by on-screen target."))))
