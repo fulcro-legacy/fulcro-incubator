@@ -1,5 +1,10 @@
 # Change Log
 
+0.0.34
+---
+- Fixed bug in pm targeting when the source is coming from a non-returning
+value.
+
 0.0.33
 ------
 - Fixed bug in dynamic router that was causing deferred routes to fail
