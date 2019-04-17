@@ -207,7 +207,7 @@
                 (when (nil? (second return-value-ident))
                   (log/warn "Targeted value of type " returning " did not generate a valid ident from the server return value: " mutation-response-swap))
                 (swap! (:state env) data-targeting/process-target return-value-ident target false))
-              (swap! (:state env) data-targeting/process-target (conj ref mutation-response-swap-key) target false))
+              (swap! (:state env) data-targeting/process-target (conj ref mutation-response-key) target false))
             (when (get-in @state (conj target mutation-response-key))
               (swap! state update-in target dissoc mutation-response-key)))
           (call-mutation-action :ok-action env mutation params)
