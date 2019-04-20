@@ -183,11 +183,11 @@
           mutation-response-swap-key (mutation-response-swap-keyword mutation-response-key)
           {::keys [status] :as data} (get-in @state (conj ref mutation-response-swap-key))
           api-error?                 (contains? data ::mutation-errors)
-          mutation-response-swap     (if (and (not api-error?) (prim/component-class? returning))
-                                       (prim/db->tree (prim/get-query returning) data @state)
-                                       data)
           hard-error?                (= status :hard-error)
-          had-error?                 (or hard-error? api-error?)]
+          had-error?                 (or hard-error? api-error?)
+          mutation-response-swap     (if (and (not had-error?) (prim/component-class? returning))
+                                       (prim/db->tree (prim/get-query returning) data @state)
+                                       data)]
       (if had-error?
         (do
           (db.h/swap-entity! env assoc mutation-response-key (merge {::status :api-error} mutation-response-swap {::key key}))
