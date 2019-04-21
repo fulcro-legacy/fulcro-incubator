@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.35
+------
+- Fixed bug in pmutations when the return value is an error
+
 0.0.34
 ---
 - Fixed bug in pm targeting when the source is coming from a non-returning
