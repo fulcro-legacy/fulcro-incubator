@@ -88,6 +88,8 @@
                                                  (do-something-good {})])} "Combo under ptransact!")
     (dom/button {:onClick #(pm/pmutate! this `do-something-bad {::pm/key :Sad-face})} "Mutation Crash/Hard network error")
     (dom/button {:onClick #(pm/pmutate! this `do-something-sorta-bad {::pm/key :Bummer})} "API Level Mutation Error")
+    (dom/button {:onClick #(pm/pmutate! this `do-something-sorta-bad {::pm/key :Bummer
+                                                                      ::pm/returning TodoList})} "API Level Mutation Error With Returning")
     (dom/button {:onClick #(pm/pmutate! this do-something-good-interface {::pm/returning TodoList
                                                                           ::pm/key       :todo-list-key
                                                                           ::pm/target    (df/multiple-targets
