@@ -166,7 +166,7 @@ For example:
 
 ```
 (pm/pmutate! this `do-thing {::pm/returning TodoList
-                             ::pm/target (df/mutliple-targets
+                             ::pm/target (df/multiple-targets
                                            [:main-list]
                                            (df/append-to [:all-lists]))})
 ```
