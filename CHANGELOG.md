@@ -1,5 +1,11 @@
 # Change Log
 
+0.0.36
+------
+- Fixed bug in `dr/change-route-relative` when mounted non-router-target component has 
+same ident as mounted router-target and added some validation/error reporting for invalid
+paths.
+
 0.0.35
 ------
 - Fixed bug in pmutations when the return value is an error
