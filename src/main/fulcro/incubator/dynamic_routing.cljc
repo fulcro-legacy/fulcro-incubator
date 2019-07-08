@@ -348,7 +348,7 @@
                                                                    (when (= ::current-route dispatch-key)
                                                                      (reduced component)))
                                                            nil
-                                                           (:children (prim/query->ast (prim/get-query component))))
+                                                           (:children (prim/query->ast (prim/get-query component state-map))))
                                     mounted-targets      (prim/class->all reconciler mounted-target-class)]
                                 (when (> (count mounted-targets) 1)
                                   (log/error "More than one route target on screen of type" mounted-target-class))
