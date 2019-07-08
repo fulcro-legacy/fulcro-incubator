@@ -10,7 +10,6 @@
     [fulcro.logging :as log]
     [clojure.spec.alpha :as s]
     #?(:clj [cljs.analyzer :as ana])
-    [ucv.util :as util]
     [fulcro.util :as futil]))
 
 ;; STATIC protocol.
@@ -326,7 +325,7 @@
   #?(:clj
      true
      :cljs
-     (let [new-path   (util/spy (proposed-new-path this-or-reconciler relative-class-or-instance new-route))
+     (let [new-path   (proposed-new-path this-or-reconciler relative-class-or-instance new-route)
            reconciler (if (prim/reconciler? this-or-reconciler) this-or-reconciler (prim/get-reconciler this-or-reconciler))
            state-map  (-> reconciler prim/app-state deref)
            router     relative-class-or-instance
