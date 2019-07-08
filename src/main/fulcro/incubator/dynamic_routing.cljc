@@ -334,18 +334,27 @@
            root       (ast-node-for-live-router reconciler ast)
            to-signal  (atom [])
            to-cancel  (atom [])
-           _          (loop [{:keys [component] :as node} root new-path-remaining new-path]
+           _          (loop [{:keys [component children] :as node} root new-path-remaining new-path]
                         (when (and component (router? component))
                           (let [new-target    (first new-path-remaining)
                                 router-ident  (prim/get-ident component {})
                                 active-target (get-in state-map (conj router-ident ::current-route))
                                 {:keys [target]} (get-in state-map (conj router-ident ::pending-route))
-                                next-router   (some #(ast-node-for-live-router reconciler %) (:children node))]
+                                next-router   (some #(ast-node-for-live-router reconciler %) children)]
                             (when (futil/ident? target)
                               (swap! to-cancel conj target))
                             (when (and (not= new-target active-target) (vector? active-target))
-                              (when-let [c (prim/ref->any reconciler active-target)]
-                                (swap! to-signal conj c)))
+                              (let [mounted-target-class (reduce (fn [acc {:keys [dispatch-key component]}]
+                                                                   (when (= ::current-route dispatch-key)
+                                                                     (reduced component)))
+                                                           nil
+                                                           (some-> component (prim/get-query state-map)
+                                                             prim/query->ast :children))
+                                    mounted-targets      (prim/class->all reconciler mounted-target-class)]
+                                (when (> (count mounted-targets) 1)
+                                  (log/error "More than one route target on screen of type" mounted-target-class))
+                                (when (seq mounted-targets)
+                                  (swap! to-signal into mounted-targets))))
                             (when next-router
                               (recur next-router (rest new-path-remaining))))))
            components (reverse @to-signal)
@@ -366,6 +375,8 @@
   ([this-or-reconciler relative-class-or-instance new-route]
    (change-route-relative this-or-reconciler relative-class-or-instance new-route {}))
   ([this-or-reconciler relative-class-or-instance new-route timeouts]
+   (when-not (seq (proposed-new-path this-or-reconciler relative-class-or-instance new-route))
+     (log/error "Could not find route targets for new-route" new-route))
    (if (signal-router-leaving this-or-reconciler relative-class-or-instance new-route)
      (uism/defer
        #(let [reconciler (if (prim/reconciler? this-or-reconciler) this-or-reconciler (prim/get-reconciler this-or-reconciler))
