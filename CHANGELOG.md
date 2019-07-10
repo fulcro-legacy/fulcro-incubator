@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.37
+------
+- Fixed bad spec in state machines
+
 0.0.36
 ------
 - Fixed bug in `dr/change-route-relative` when mounted non-router-target component has 
