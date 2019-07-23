@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.38
+------
+- Fixed route matching to maximal match
+
 0.0.37
 ------
 - Fixed bad spec in state machines
