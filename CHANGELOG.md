@@ -1,5 +1,9 @@
 # Change Log
 
+0.0.39
+------
+- Removed errant specs
+
 0.0.38
 ------
 - Fixed route matching to maximal match
