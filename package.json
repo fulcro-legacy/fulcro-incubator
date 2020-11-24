@@ -8,7 +8,7 @@
     "test": "test"
   },
   "dependencies": {
-    "highlight.js": "^9.13.1",
+    "highlight.js": "^10.1.2",
     "karma": "3.1.4",
     "karma-chrome-launcher": "2.2.0",
     "karma-cljs-test": "^0.1.0",
