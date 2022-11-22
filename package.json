@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "highlight.js": "^9.13.1",
-    "karma": "3.1.4",
+    "karma": "6.4.1",
     "karma-chrome-launcher": "2.2.0",
     "karma-cljs-test": "^0.1.0",
     "semantic-ui-react": "0.85.0",
